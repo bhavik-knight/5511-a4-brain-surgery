@@ -1,0 +1,13 @@
+feat:
+  - changed-files:
+    - any-glob-to-any-file: "src/**/*"
+    - head-branch: "^feat/.*"
+
+fix:
+  - head-branch: "^fix/.*"
+
+experiment:
+  - head-branch: "^exp/.*"
+
+docs:
+  - head-branch: "^docs/.*"
