@@ -1,0 +1,8 @@
+feat:
+  - head-branch: ['^feat/.*']
+fix:
+  - head-branch: ['^fix/.*']
+experiment:
+  - head-branch: ['^exp/.*']
+docs:
+  - head-branch: ['^docs/.*']
