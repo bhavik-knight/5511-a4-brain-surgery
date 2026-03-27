@@ -1,13 +1,8 @@
 feat:
-  - changed-files:
-    - any-glob-to-any-file: "src/**/*"
-    - head-branch: "^feat/.*"
-
+  - head-branch: ['^feat/.*']
 fix:
-  - head-branch: "^fix/.*"
-
+  - head-branch: ['^fix/.*']
 experiment:
-  - head-branch: "^exp/.*"
-
+  - head-branch: ['^exp/.*']
 docs:
-  - head-branch: "^docs/.*"
+  - head-branch: ['^docs/.*']
