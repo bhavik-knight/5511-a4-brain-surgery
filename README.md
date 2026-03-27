@@ -1,4 +1,4 @@
-# Brain Surgery: Mechanistic Interpretability with SAEs
+# Brain Surgery Project
 
 A graduate-level deep learning project implementing Sparse Autoencoders (SAEs) to extract interpretable features from small language models, following Anthropic's *[Scaling Monosemanticity](https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html)* paper.
 
