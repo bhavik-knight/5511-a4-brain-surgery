@@ -13,20 +13,32 @@ dependencies = [
     "ty>=0.0.26",
 ]
 
+[tool.ruff]
+src = ["src"]
+extend-exclude = ["data", "results"]
 
 [tool.ruff.lint]
 # D = Docstrings, ANN = Type Annotations, UP = Upgrade (Modern Syntax)
 select = ["D", "ANN", "UP", "E", "F"]
+ignore = ["D100", "D104"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.mypy]
 python_version = "3.12"
+mypy_path = "src" # Point mypy to the directory containing your code
 strict = true
 plugins = ["pydantic.mypy"] # If you decide to use Pydantic
+check_untyped_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
+
+# This specific line fixes the "No .py files found" error
+files = ["src"]
+
