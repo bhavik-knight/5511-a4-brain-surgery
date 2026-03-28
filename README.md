@@ -42,6 +42,128 @@ This project investigates mechanistic interpretability by training Sparse Autoen
    uv run pytest tests/
    ```
 
+## 🦙 Cross-Platform Local LLM Setup
+
+This project uses **Ollama** to run **Qwen 2.5 0.5B** locally for NLP research without relying on cloud APIs.
+
+### Installation by Operating System
+
+#### 🐧 Linux (Zorin OS / Ubuntu / Debian)
+
+Run the official installation script:
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
+```
+
+Verify installation:
+```bash
+ollama --version
+```
+
+Start the Ollama service:
+```bash
+ollama serve
+```
+
+---
+
+#### 🍎 macOS
+
+Install via Homebrew:
+```bash
+brew install ollama
+```
+
+Start Ollama:
+```bash
+ollama serve
+```
+
+**Apple Silicon Support (M1/M2/M3):**  
+Ollama automatically detects and enables GPU acceleration on Apple Silicon Macs. This provides significant performance improvements over CPU-only inference.
+
+---
+
+#### 🪟 Windows
+
+1. Download the Ollama installer from [ollama.com](https://ollama.com)
+2. Run the `.exe` installer and follow the setup wizard
+3. Launch Ollama from the Start Menu
+
+**Native vs. WSL2:**
+- **Native Installer (Recommended for NVIDIA GPUs):** Works with NVIDIA CUDA support directly
+- **WSL2 Alternative:** If using Docker containers or preferring Linux environment, install Ollama inside Windows Subsystem for Linux 2
+
+Start the service:
+```bash
+ollama serve
+```
+
+---
+
+### Model Download
+
+Once Ollama is running, download Qwen 2.5 0.5B:
+
+```bash
+ollama pull qwen2.5:0.5b
+```
+
+This downloads the model (~370MB) to your local Ollama cache. You only need to run this once.
+
+Verify the model is installed:
+```bash
+ollama list
+```
+
+---
+
+### Hardware Performance & Memory Expectations
+
+| Hardware | VRAM Usage | Speed | Notes |
+|----------|-----------|-------|-------|
+| **NVIDIA RTX 4070** | ~1.2 GB | ⚡ Fast (~100 tokens/sec) | Optimal for this model |
+| **Apple M1/M2/M3** | ~1 GB | ⚡ Fast (~80-120 tokens/sec) | GPU-accelerated by default |
+| **CPU-Only (Intel/AMD)** | ~2 GB | 🐢 Slow (~5-15 tokens/sec) | Not recommended for inference |
+| **NVIDIA RTX 3060** | ~1 GB | ⚡ Very Fast (~150 tokens/sec) | 12GB VRAM card, good for larger models |
+
+> **Tip:** The Qwen 2.5 0.5B model is lightweight and runs efficiently on most hardware. Even CPU-only inference is viable for development and testing.
+
+---
+
+### Environment Variables
+
+If you need to access Ollama from a Docker container or another machine on your network:
+
+#### Set Host to Accept External Connections
+
+```bash
+export OLLAMA_HOST=0.0.0.0:11434
+ollama serve
+```
+
+Then from another machine or Docker container:
+```bash
+export OLLAMA_BASE_URL=http://your-machine-ip:11434
+```
+
+**Default:** Ollama listens on `localhost:11434` (only accessible locally), which is fine for single-machine setups.
+
+---
+
+### Quick Test
+
+Query the model directly via curl:
+```bash
+curl http://localhost:11434/api/generate -d '{
+  "model": "qwen2.5:0.5b",
+  "prompt": "What is machine learning?",
+  "stream": false
+}'
+```
+
+---
+
 ## 📁 Project Structure
 
 ```
