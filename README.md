@@ -274,5 +274,9 @@ See [LICENSE](LICENSE) for details.
 ---
 
 **Course:** MCDA 5511 – Deep Learning (Winter 2026)  
-**Instructor:** Greg Kirczenow  
-**Team Members:** TBD
+**Instructor:** Greg Kirczenow, Somto Muetoe, Dr. Drira, Prof. Neveditsin**
+**Team Members:** 
+1. Bhavik Kantilal Bhagat
+2. Miguel Angel Palafox Gomez
+3. Nikola Krizner
+4. Sridhar Vadla
