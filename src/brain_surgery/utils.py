@@ -79,33 +79,12 @@ for _dir in _DIRS_TO_CREATE:
 
 
 def get_device() -> torch.device:
-    """Get the appropriate PyTorch device (cuda or cpu).
-
-    Automatically detects GPU availability and returns cuda if available,
-    otherwise falls back to cpu.
-
-    Returns:
-        A torch.device object set to cuda if GPU is available, else cpu.
-
-    Example:
-        >>> device = get_device()
-        >>> print(f"Using device: {device}")
-        Using device: cuda
-    """
+    """Get the appropriate PyTorch device (cuda or cpu)."""
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def get_device_name() -> str:
-    """Get the name of the current device as a string.
-
-    Returns:
-        Either "cuda" or "cpu" depending on availability.
-
-    Example:
-        >>> device_name = get_device_name()
-        >>> print(f"Device: {device_name}")
-        Device: cuda
-    """
+    """Get the name of the current device as a string ("cuda" or "cpu")."""
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -113,8 +92,8 @@ def get_device_name() -> str:
 # CONFIGURATION CONSTANTS
 # ============================================================================
 
-# Default model for Q1 (can be changed to other Hugging Face models)
-DEFAULT_MODEL_NAME: str = "Qwen/Qwen2.5-0.5B"
+# Default model for Q1 (local directory; downloaded once, then used offline)
+DEFAULT_MODEL_NAME: str = str(MODELS_DIR / "qwen2.5-0.5b")
 
 # Default layer index for 0.5B models (middle layers recommended)
 DEFAULT_LAYER_IDX: int = 4

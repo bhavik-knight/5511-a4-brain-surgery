@@ -15,54 +15,65 @@ A 4-member team assignment with clearly defined roles and responsibilities. Each
 
 ---
 
+## ✅ Completed
+
+- [x] **2026-03-28** — **Member 1: Subtask 1 (Q1 + Repo Setup)** completed (ModelWrapper + hooks, `.pt` activation saving, and Q1 documentation).
+
 ## Member 1: The Architect 👷 (Q1 & Repo Setup)
 
 **Primary Focus:** Model wrapping, forward hooks, initial PyTorch pipeline architecture.
 
+**Subtask 1 (Q1) Status:** **COMPLETED** ✅ *(2026-03-28)*
+
 ### Assigned Tasks
 
 #### Repository Initialization
-- [ ] Initialize repository with `uv init`
-- [ ] Set up a professional `pyproject.toml` with:
+- [x] Initialize repository with `uv init` *(2026-03-28)*
+- [x] Set up a professional `pyproject.toml` with: *(2026-03-28)*
   - Project metadata
   - Dependencies: `torch`, `transformers`, `pydantic`, `pytest`
   - Development dependencies: `mypy`, `ruff`, `pre-commit`
-- [ ] Configure dev tools: `ruff.toml`, `mypy.ini`, `.pre-commit-config.yaml`
-- [ ] Create standard `.gitignore` excluding cache, models, results/
-- [ ] Create `src/brain_surgery/` package structure
+- [x] Configure dev tools: `pyproject.toml` (ruff+mypy), `pyrightconfig.json`, `.pre-commit-config.yaml` *(2026-03-28)*
+- [x] Create standard `.gitignore` excluding cache, models, results/ *(2026-03-28)*
+- [x] Create `src/brain_surgery/` package structure *(2026-03-28)*
 
 #### Q1: Model Wrapping & Forward Hooks
-- [ ] Implement `ModelWrapper` class using `transformers` library
+- [x] Implement `ModelWrapper` class using `transformers` library *(2026-03-28)*
   - Load Qwen-2.5-0.5B (or Qwen2-0.5B)
   - Accept `model_name` and `layer_idx` parameters
   - Register forward hooks on the specified layer's residual stream
-- [ ] Implement `generate_with_activations(prompt, max_tokens)` method
+- [x] Implement `generate_with_activations(prompt, max_tokens)` method *(2026-03-28)*
   - Returns tuple: `(generated_text, activations_tensor)`
   - Activations shape: `(seq_len, hidden_dim)`
-- [ ] Document:
+- [x] Document: *(2026-03-28)*
   - Why register on residual stream vs. MLP output?
   - Limitations of hook-based approach (computational overhead, synchronization)
   - Choice of layer (middle layers recommended for balance)
   - Example usage with sample prompts
 
 #### README Documentation
-- [ ] Write "Project Overview" section
-- [ ] Create "Installation" subsection with `uv sync` example
-- [ ] Document project structure tree
-- [ ] Provide "Getting Started" guidance (Q1 execution example)
+- [x] Write "Project Overview" section *(2026-03-28)*
+- [x] Create "Installation" subsection with `uv sync` example *(2026-03-28)*
+- [x] Document project structure tree *(2026-03-28)*
+- [x] Provide "Getting Started" guidance (Q1 execution example) *(2026-03-28)*
 
 ### Deliverables
 - `src/brain_surgery/model_wrapper.py` (fully typed, docstrings)
 - `pyproject.toml` (tested dependencies)
-- `ruff.toml`, `mypy.ini`, `.pre-commit-config.yaml` (working lint/type check)
+- `pyproject.toml`, `pyrightconfig.json`, `.pre-commit-config.yaml` (working lint/type check)
 - README "Installation" and "Project Structure" sections
 - Example notebook or script demonstrating hook usage
 
+**Deliverables Detail (2026-03-28):**
+- `ModelWrapper` is functional (`generate_with_activations()` + `save_activations()`).
+- Forward hooks verified end-to-end on **Qwen-2.5-0.5B** using an **RTX 4070**.
+- Q1 documentation finalized in `docs/Q1_model_and_hooks.md`.
+
 ### Success Criteria
-- [ ] Code passes `ruff check` and `mypy --strict`
-- [ ] Hooks correctly capture activations for at least 3 test prompts
-- [ ] Type hints on all functions (including hooks and callbacks)
-- [ ] Google-style docstrings for `ModelWrapper` and `generate_with_activations`
+- [x] Code passes `ruff check` and `mypy --strict` *(2026-03-28)*
+- [x] Hooks correctly capture activations for at least 3 test prompts *(2026-03-28)*
+- [x] Type hints on all functions (including hooks and callbacks) *(2026-03-28)*
+- [x] Google-style docstrings for `ModelWrapper` and `generate_with_activations` *(2026-03-28)*
 
 ---
 
@@ -73,6 +84,18 @@ A 4-member team assignment with clearly defined roles and responsibilities. Each
 ### Assigned Tasks
 
 #### Q2: Data Collection & Activation Storage
+
+**Status:** Ready to Start
+
+**Prerequisites:** Requires `ModelWrapper.save_activations()` to be called in a loop over the chosen corpus.
+
+**Handoff Instructions:**
+- Use `ModelWrapper.generate_with_activations()` to capture token-aligned activations per prompt/document.
+- Use `ModelWrapper.save_activations()` inside that loop to write `.pt` artifacts under `data/activations/` (one per batch/prompt).
+- Use these saved artifacts to implement the DataGenerator / activation collection pipeline for Q2.
+
+**Technical Note:** Activations default to CPU for VRAM safety, while the model remains on GPU (when CUDA is available).
+
 - [ ] Implement `CorpusDataLoader` class (using Q1's `ModelWrapper`)
   - Load corpus: TinyStories or WikiText (user choice)
   - Batch tokenization and padding
@@ -112,9 +135,9 @@ A 4-member team assignment with clearly defined roles and responsibilities. Each
 - [ ] Provide example commands for running data collection and interventions
 
 ### Deliverables
-- `src/brain_surgery/activation_capture.py` (data loader + collector)
+- `src/brain_surgery/data_gen.py` (data loader + activation collection)
 - `src/brain_surgery/intervention.py` (clamping hooks + experiments)
-- `results/corpus_statistics.json` (Q2 output)
+- `results/metrics/corpus_statistics.json` (Q2 output)
 - `results/experiments/clamping_effects_summary.json` (Q6 output)
 - README sections for Q2 and Q6
 
@@ -167,10 +190,10 @@ A 4-member team assignment with clearly defined roles and responsibilities. Each
 - [ ] Document key concepts: activation space, feature space, tied weights, sparsity
 
 ### Deliverables
-- `src/brain_surgery/sparse_autoencoder.py` (SAE + training utilities)
+- `src/brain_surgery/sae.py` (SAE + training utilities)
 - `results/metrics/sae_training_loss.png` (training curves)
 - `results/metrics/hyperparameter_sweep.json` (tuning results)
-- `results/checkpoints/best_sae.pth` (trained model weights)
+- Trained SAE weights saved under `results/` (location to be finalized during Q3 implementation)
 - README "Q3: Hyperparameter Tuning" section
 
 ### Success Criteria
@@ -233,8 +256,8 @@ A 4-member team assignment with clearly defined roles and responsibilities. Each
   - Explain semantic groupings
 
 ### Deliverables
-- `src/brain_surgery/feature_interpretation.py` (backwards mapping + analysis)
-- `src/brain_surgery/feature_labeling.py` (LLM labeling + clustering, *optional*)
+- `src/brain_surgery/interpret.py` (backwards mapping + analysis)
+- (Optional) any Q5-specific code may live in `src/brain_surgery/interpret.py` or a new dedicated module if created later
 - `results/features/feature_report.md` (manual analysis)
 - `results/features/feature_*.txt` (example snippets per feature)
 - `results/features/activation_distributions.png` (histograms)
@@ -285,7 +308,7 @@ A 4-member team assignment with clearly defined roles and responsibilities. Each
 
 | Week | Milestone | Owner(s) | Status |
 |------|-----------|----------|--------|
-| **1–2** | Repo setup, Q1 model wrapper | Member 1 | ⏳ |
+| **1–2** | Repo setup, Q1 model wrapper | Member 1 | ✅ (2026-03-28) |
 | **2–3** | Q2 data collection pipeline | Member 2 | ⏳ |
 | **3–4** | Q3 SAE training + hyperparameter tuning | Member 3 | ⏳ |
 | **4–5** | Q4 feature interpretation | Member 4 | ⏳ |

@@ -6,7 +6,7 @@ Activations are extracted from the residual stream of middle transformer layers,
 enabling mechanistic interpretability analysis via Sparse Autoencoders.
 
 Typical usage:
-    >>> wrapper = ModelWrapper(model_name="Qwen/Qwen2.5-0.5B", layer_idx=4)
+    >>> wrapper = ModelWrapper(model_name="./models/qwen2.5-0.5b", layer_idx=4)
     >>> text, activations = wrapper.generate_with_activations(
     ...     prompt="The capital of France is",
     ...     max_tokens=20
@@ -14,6 +14,13 @@ Typical usage:
     >>> print(f"Generated: {text}")
     >>> print(f"Activations shape: {activations.shape}")
 """
+
+from __future__ import annotations
+
+# ruff: noqa: ANN101
+
+from pathlib import Path
+from typing import Any, Literal, cast
 
 import torch
 import torch.nn as nn
@@ -23,6 +30,19 @@ from transformers import (
     AutoTokenizer,
     PreTrainedModel,
     PreTrainedTokenizer,
+)
+from transformers.tokenization_utils_base import BatchEncoding
+
+from .utils import (
+    ACTIVATIONS_DIR,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL_NAME,
+    DEFAULT_LAYER_IDX,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_TOP_P,
+    DEVICE,
+    ROOT_DIR,
+    ensure_dir_exists,
 )
 
 
@@ -34,7 +54,7 @@ class ModelWrapper:
     from that layer are captured and returned alongside the generated text.
 
     Attributes:
-        model_name: Hugging Face model identifier (e.g., "Qwen/Qwen2.5-0.5B").
+        model_name: Local model directory (e.g., "./models/qwen2.5-0.5b").
         layer_idx: Index of the transformer layer to hook (0-indexed).
         model: The loaded pre-trained language model.
         tokenizer: The tokenizer for the model.
@@ -43,18 +63,32 @@ class ModelWrapper:
         hooks: List of registered hook handles for cleanup.
 
     Example:
-        >>> wrapper = ModelWrapper("Qwen/Qwen2.5-0.5B", layer_idx=4)
+        >>> wrapper = ModelWrapper("./models/qwen2.5-0.5b", layer_idx=4)
         >>> text, acts = wrapper.generate_with_activations("Hello", max_tokens=10)
         >>> print(acts.shape)  # (seq_len, hidden_dim)
     """
 
-    def __init__(self: "ModelWrapper", model_name: str, layer_idx: int) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        layer_idx: int,
+        *,
+        activation_device: torch.device | Literal["cpu", "model"] = "cpu",
+    ) -> None:
         """Initialize the ModelWrapper with a pre-trained model.
 
         Args:
-            model_name: Name or path of the Hugging Face model to load.
+            model_name: Local directory containing a `transformers`-compatible
+                model + tokenizer (downloaded ahead of time into `./models/`).
             layer_idx: Index of the transformer layer to capture activations from.
                 For Qwen-2.5-0.5B (8 layers), recommended: 3-5 for middle layers.
+            activation_device: Where to store captured activations.
+                - "cpu" (default): move activations off-GPU immediately.
+                - "model": keep activations on the same device as the model.
+                - torch.device(...): store on an explicit device.
+
+                Defaulting to CPU is safer for VRAM management (e.g., RTX 4070
+                12GB) when collecting many prompts / long sequences.
 
         Raises:
             ValueError: If layer_idx is negative.
@@ -65,27 +99,64 @@ class ModelWrapper:
 
         self.model_name: str = model_name
         self.layer_idx: int = layer_idx
-        self.device: torch.device = (
-            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        self.device: torch.device = DEVICE
+
+        model_dir = Path(model_name)
+        if not model_dir.is_absolute():
+            model_dir = (ROOT_DIR / model_dir).resolve()
+        if not model_dir.exists():
+            raise FileNotFoundError(
+                "Local model directory not found: "
+                f"{model_dir}. Download the model into ./models first."
+            )
+        if not model_dir.is_dir():
+            raise NotADirectoryError(f"Expected a model directory, got: {model_dir}")
+
+        if activation_device == "cpu":
+            self.activation_device: torch.device = torch.device("cpu")
+        elif activation_device == "model":
+            self.activation_device = self.device
+        else:
+            self.activation_device = activation_device
+
+        # Load model and tokenizer from local disk (offline).
+        # Use FP16 + device_map='auto' on CUDA for VRAM efficiency.
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        self.model: PreTrainedModel = cast(
+            PreTrainedModel,
+            AutoModelForCausalLM.from_pretrained(
+                str(model_dir),
+                local_files_only=True,
+                device_map="auto",
+                torch_dtype=torch_dtype,
+            ),
+        )
+        self.tokenizer: PreTrainedTokenizer = cast(
+            PreTrainedTokenizer,
+            AutoTokenizer.from_pretrained(
+                str(model_dir),
+                local_files_only=True,
+            ),
         )
 
-        # Load model and tokenizer from Hugging Face
-        self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-            model_name, torch_dtype=torch.float32
-        )
-        self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(model_name)
-
-        self.model.to(self.device)  # pyright: ignore[reportCallIssue]
-        self.model.eval()  # Set to evaluation mode
+        cast(nn.Module, self.model).eval()  # Set to evaluation mode
 
         # Storage for captured activations
         self.activations: dict[str, Tensor] = {}
+        self._activation_steps: list[Tensor] = []
         self.hooks: list[torch.utils.hooks.RemovableHandle] = []
+
+        # Metadata for saving (populated by generate_with_activations)
+        self._last_prompt: str | None = None
+        self._last_generated_text: str | None = None
+        self._last_output_ids: Tensor | None = None  # (batch, seq)
+        self._last_token_texts: list[str] | None = None
+        self._last_token_strs: list[str] | None = None
 
         # Register hooks on the target layer
         self._register_hooks()
 
-    def _register_hooks(self: "ModelWrapper") -> None:
+    def _register_hooks(self) -> None:
         """Register forward hooks on the residual stream of the target layer.
 
         This method registers hooks on the specified transformer layer's output,
@@ -96,35 +167,44 @@ class ModelWrapper:
             Hook placement on residual stream (vs. MLP output) captures the full
             attention output + residual, providing richer signal for SAE training.
 
+            By default we move captured activations to CPU immediately. This is a
+            deliberate VRAM-management strategy: activation collection can be much
+            larger than the model weights, and keeping large activation buffers on
+            GPU can quickly exhaust VRAM during dataset-scale runs.
+
         Raises:
             RuntimeError: If layer index is out of range for the model.
         """
-        # Access the model's transformer layers
-        if hasattr(self.model, "model"):
-            # For models like Qwen that use model.model.layers
-            layers = self.model.model.layers  # pyright: ignore[reportAttributeAccessIssue]
+        # Access the model's transformer layers.
+        # Different architectures expose layers under different attribute paths.
+        model_any: Any = self.model
+        if hasattr(model_any, "model") and hasattr(model_any.model, "layers"):
+            layers = model_any.model.layers
+        elif hasattr(model_any, "transformer") and hasattr(model_any.transformer, "h"):
+            layers = model_any.transformer.h
         else:
-            # Fallback for other architectures
-            layers = self.model.transformer.h  # pyright: ignore[reportAttributeAccessIssue]
+            raise RuntimeError(
+                "Unsupported model architecture: cannot locate transformer layers"
+            )
 
         if self.layer_idx >= len(layers):  # pyright: ignore[reportArgumentType]
             raise RuntimeError(
                 f"layer_idx {self.layer_idx} exceeds number of layers ({len(layers)})"  # pyright: ignore[reportArgumentType]
             )
 
-        target_layer = layers[self.layer_idx]  # pyright: ignore[reportIndexIssue]
+        target_layer: nn.Module = cast(nn.Module, layers[self.layer_idx])
 
         # Hook function to capture activations
         def hook_fn(
-            module: nn.Module,
-            input_data: tuple[Tensor, ...],
+            _module: nn.Module,
+            _input_data: tuple[Tensor, ...],
             output_data: Tensor | tuple[Tensor, ...],
         ) -> None:
             """Forward hook to capture layer output activations.
 
             Args:
-                module: The module being hooked.
-                input_data: Input tensors to the module.
+                _module: The module being hooked (unused).
+                _input_data: Input tensors to the module (unused).
                 output_data: Output from the module (tensor or tuple of tensors).
             """
             # Handle different output formats
@@ -135,14 +215,35 @@ class ModelWrapper:
                 # Others return just the tensor
                 hidden_states = output_data
 
-            # Store activations in CPU memory to save GPU memory
-            self.activations["layer"] = hidden_states.detach().cpu()
+            # Store activations on the requested device.
+            # During generation, the model is called multiple times (often with
+            # seq_len=1 after the first step). We accumulate steps and stitch
+            # them into a single (batch, seq_len, hidden_dim) tensor later.
+            stored = hidden_states.detach()
+            if stored.device != self.activation_device:
+                stored = stored.to(self.activation_device)
+
+            if stored.dim() == 2:
+                stored = stored.unsqueeze(0)
+
+            self._activation_steps.append(stored)
 
         # Register the hook
-        hook_handle = target_layer.register_forward_hook(hook_fn)  # pyright: ignore[reportAttributeAccessIssue]
+        hook_handle = target_layer.register_forward_hook(hook_fn)
         self.hooks.append(hook_handle)
 
-    def unregister_hooks(self: "ModelWrapper") -> None:
+    def _infer_model_input_device(self) -> torch.device:
+        device_attr = getattr(self.model, "device", None)
+        if isinstance(device_attr, torch.device):
+            return device_attr
+        if isinstance(device_attr, str):
+            return torch.device(device_attr)
+        try:
+            return next(self.model.parameters()).device
+        except StopIteration:
+            return self.device
+
+    def unregister_hooks(self) -> None:
         """Unregister all forward hooks to free memory and restore normal behavior.
 
         This should be called when activation capture is no longer needed.
@@ -151,13 +252,14 @@ class ModelWrapper:
             hook.remove()
         self.hooks.clear()
         self.activations.clear()
+        self._activation_steps.clear()
 
     def generate_with_activations(
-        self: "ModelWrapper",
+        self,
         prompt: str,
-        max_tokens: int = 50,
-        temperature: float = 0.7,
-        top_p: float = 0.95,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        temperature: float = DEFAULT_TEMPERATURE,
+        top_p: float = DEFAULT_TOP_P,
     ) -> tuple[str, dict[str, Tensor]]:
         """Generate text from a prompt while capturing layer activations.
 
@@ -188,33 +290,274 @@ class ModelWrapper:
 
         # Clear previous activations
         self.activations.clear()
+        self._activation_steps.clear()
+        self._last_prompt = prompt
+        self._last_generated_text = None
+        self._last_output_ids = None
+        self._last_token_texts = None
+        self._last_token_strs = None
 
         # Tokenize the prompt
-        inputs = self.tokenizer(
-            prompt, return_tensors="pt", truncation=True, max_length=2048
+        inputs = cast(
+            BatchEncoding,
+            self.tokenizer(
+                prompt, return_tensors="pt", truncation=True, max_length=2048
+            ),
         )
-        input_ids = inputs["input_ids"].to(self.device)  # pyright: ignore[reportAttributeAccessIssue]
+        model_device = self._infer_model_input_device()
+        input_ids = cast(Tensor, inputs["input_ids"]).to(model_device)
+        attention_mask = cast(Tensor | None, inputs.get("attention_mask"))
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(model_device)
+
+        # Ensure pad token is set (common for causal LMs)
+        if (
+            self.tokenizer.pad_token_id is None
+            and self.tokenizer.eos_token_id is not None
+        ):
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        pad_token_id = (
+            self.tokenizer.pad_token_id
+            if self.tokenizer.pad_token_id is not None
+            else self.tokenizer.eos_token_id
+        )
 
         # Generate tokens with activation capture
         with torch.no_grad():
-            output_ids = self.model.generate(  # pyright: ignore[reportCallIssue]
+            generate_out = cast(Any, self.model).generate(
                 input_ids,
+                attention_mask=attention_mask,
                 max_new_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
                 do_sample=True,
-                pad_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=pad_token_id,
+                return_dict_in_generate=False,
             )
 
+        output_ids: Tensor
+        if isinstance(generate_out, torch.Tensor):
+            output_ids = generate_out
+        else:
+            # Some configs return a Generate*Output; sequences holds the token ids.
+            output_ids = cast(Tensor, generate_out.sequences)
+
+        # Combine activation steps into a single tensor
+        if self._activation_steps:
+            # One cat at the end avoids repeated reallocations.
+            # Make contiguous so downstream slicing/saving doesn't end up with
+            # unexpected striding.
+            combined = torch.cat(self._activation_steps, dim=1).contiguous()
+            self.activations["layer"] = combined
+
         # Decode the full generated text
-        generated_text: str = self.tokenizer.decode(  # pyright: ignore[reportAssignmentType]
-            output_ids[0], skip_special_tokens=True
-        )
+        generated_text = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        if isinstance(generated_text, list):
+            # Defensive: some stubs model decode as str|list[str]
+            generated_text = generated_text[0] if generated_text else ""
+
+        # Store token metadata for saving
+        self._last_generated_text = generated_text
+        self._last_output_ids = output_ids.detach().cpu()
+        token_ids = output_ids[0].detach().cpu().tolist()
+        token_strs = self.tokenizer.convert_ids_to_tokens(token_ids)
+        if isinstance(token_strs, str):
+            token_strs = [token_strs]
+        self._last_token_strs = list(token_strs)
+
+        def _decode_single_token(tid: int) -> str:
+            decoded = cast(
+                str | list[str],
+                self.tokenizer.decode([tid], skip_special_tokens=False),
+            )
+            if isinstance(decoded, list):
+                return decoded[0] if decoded else ""
+            return decoded
+
+        self._last_token_texts = [_decode_single_token(tid) for tid in token_ids]
 
         # Return text and activations captured during generation
         return generated_text, self.activations.copy()
 
-    def __repr__(self: "ModelWrapper") -> str:
+    def save_activations(
+        self,
+        *,
+        save_dir: Path | None = None,
+        batch_idx: int = 0,
+        file_stem: str | None = None,
+        fmt: Literal["pt"] = "pt",
+        device: torch.device | Literal["cpu", "keep"] = "cpu",
+        gitignore_if_large: bool = True,
+        max_mb: int = 50,
+        gitignore_path: Path | None = None,
+        gitignore_mode: Literal["file", "folder"] = "file",
+    ) -> Path:
+        """Save token-aligned activations + prompt text to disk.
+
+        This writes a single artifact containing:
+        - prompt and generated_text
+        - token ids and token text snippets
+        - activation tensor aligned per token
+
+        The artifact is designed so other code can load it and iterate over
+        tokens and their corresponding activation vectors.
+
+        Args:
+            save_dir: Directory to save into. Defaults to data/activations/.
+            batch_idx: Batch index used in the filename.
+            file_stem: Optional explicit stem (no extension). If omitted, a
+                descriptive name is generated.
+            fmt: Save format. Currently supports "pt".
+            device: Device to move activations onto for serialization.
+                - "cpu" (default): saves CPU tensors (portable, VRAM-safe).
+                - "keep": saves activations on their current device.
+                - torch.device(...): move activations to a specific device.
+
+                Even if you capture activations on GPU for speed, saving them on
+                CPU is usually preferred to avoid requiring CUDA when loading.
+            gitignore_if_large: If True, append this file (or its folder) to
+                .gitignore when size exceeds max_mb.
+            max_mb: Size threshold for gitignore automation.
+            gitignore_path: Path to .gitignore; defaults to project root.
+            gitignore_mode: "file" to ignore the specific artifact path, or
+                "folder" to ignore the entire activations directory.
+
+        Returns:
+            Path to the saved artifact.
+
+        Raises:
+            RuntimeError: If no generation has been run or activations are missing.
+            ValueError: If token and activation lengths cannot be aligned.
+        """
+        if fmt != "pt":
+            raise ValueError(f"Unsupported fmt: {fmt}")
+
+        if not self.activations or "layer" not in self.activations:
+            raise RuntimeError(
+                "No activations available. Call generate_with_activations() first."
+            )
+        if (
+            self._last_prompt is None
+            or self._last_generated_text is None
+            or self._last_output_ids is None
+            or self._last_token_texts is None
+        ):
+            raise RuntimeError(
+                "No generation metadata available. "
+                "Call generate_with_activations() first."
+            )
+
+        save_dir = ensure_dir_exists(save_dir or ACTIVATIONS_DIR)
+        gitignore_path = gitignore_path or (ROOT_DIR / ".gitignore")
+
+        layer_name = f"layers_{self.layer_idx}_acts_batch_{batch_idx}"
+        stem = file_stem or layer_name
+        out_path = save_dir / f"{stem}.{fmt}"
+        if out_path.exists():
+            version = 1
+            while True:
+                candidate = save_dir / f"{stem}_v{version}.{fmt}"
+                if not candidate.exists():
+                    out_path = candidate
+                    break
+                version += 1
+
+        acts = self.activations["layer"]
+        if acts.dim() == 3:
+            if acts.shape[0] != 1:
+                raise ValueError(f"Expected batch=1 activations, got {acts.shape}")
+            acts_2d = acts[0]
+        elif acts.dim() == 2:
+            acts_2d = acts
+        else:
+            raise ValueError(
+                f"Unexpected activations tensor shape: {tuple(acts.shape)}"
+            )
+
+        token_texts = self._last_token_texts
+        token_strs = self._last_token_strs or []
+        token_ids_1d = self._last_output_ids[0].to(torch.int64)
+
+        # Align lengths if needed (best-effort), but require at least 1 element.
+        seq_len = min(len(token_texts), acts_2d.shape[0])
+        if seq_len <= 0:
+            raise ValueError("No tokens/activations to save")
+        if len(token_texts) != acts_2d.shape[0]:
+            token_texts = token_texts[:seq_len]
+            token_strs = token_strs[:seq_len]
+            token_ids_1d = token_ids_1d[:seq_len]
+            acts_2d = acts_2d[:seq_len]
+
+        payload: dict[str, Any] = {
+            "model_name": self.model_name,
+            "layer_idx": self.layer_idx,
+            "device": str(self.device),
+            "activation_device": str(self.activation_device),
+            "prompt": self._last_prompt,
+            "generated_text": self._last_generated_text,
+            "token_ids": token_ids_1d,
+            "token_texts": token_texts,
+            "token_strs": token_strs,
+            "activations": acts_2d,
+        }
+
+        if device != "keep":
+            target_device = torch.device("cpu") if device == "cpu" else device
+            payload["token_ids"] = cast(Tensor, payload["token_ids"]).to(target_device)
+            payload["activations"] = cast(Tensor, payload["activations"]).to(
+                target_device
+            )
+
+        payload["activations"] = cast(Tensor, payload["activations"]).contiguous()
+
+        torch.save(payload, out_path)
+
+        if gitignore_if_large:
+            self._gitignore_large_artifact(
+                out_path,
+                gitignore_path=gitignore_path,
+                max_mb=max_mb,
+                mode=gitignore_mode,
+            )
+
+        return out_path
+
+    @staticmethod
+    def _gitignore_large_artifact(
+        artifact_path: Path,
+        *,
+        gitignore_path: Path,
+        max_mb: int,
+        mode: Literal["file", "folder"],
+    ) -> None:
+        threshold_bytes = max_mb * 1024 * 1024
+        try:
+            size_bytes = artifact_path.stat().st_size
+        except OSError:
+            return
+        if size_bytes <= threshold_bytes:
+            return
+
+        if mode == "folder":
+            pattern = "data/activations/"
+        else:
+            try:
+                pattern = str(artifact_path.relative_to(ROOT_DIR)).replace("\\", "/")
+            except ValueError:
+                pattern = str(artifact_path).replace("\\", "/")
+
+        existing = ""
+        if gitignore_path.exists():
+            existing = gitignore_path.read_text(encoding="utf-8")
+            if pattern in existing.splitlines():
+                return
+
+        with gitignore_path.open("a", encoding="utf-8") as f:
+            if existing and not existing.endswith("\n"):
+                f.write("\n")
+            f.write(f"{pattern}\n")
+
+    def __repr__(self) -> str:
         """Return string representation of the ModelWrapper.
 
         Returns:
@@ -245,3 +588,46 @@ class ModelWrapper:
 # Specific Recommendation: Use layer_idx=4 (5th layer, 0-indexed)
 # This layer captures rich, interpretable features for mechanistic analysis.
 # ============================================================================
+
+
+def main() -> None:
+    """Smoke-test the ModelWrapper.
+
+    Loads the default model, captures activations from the default layer, and
+    prints the generated text plus the captured activation tensor shape.
+    """
+    wrapper: ModelWrapper | None = None
+    try:
+        wrapper = ModelWrapper(
+            model_name=DEFAULT_MODEL_NAME,
+            layer_idx=DEFAULT_LAYER_IDX,
+        )
+        prompt = "The capital of France is"
+
+        print("forward pass with activation capture...")
+        print(f"Prompt: {prompt}\n")
+
+        text, activations = wrapper.generate_with_activations(
+            prompt=prompt,
+            max_tokens=20,
+        )
+        print(f"Generated text: {text}")
+
+        layer_acts = activations.get("layer")
+        if layer_acts is None:
+            print("No activations captured (missing key 'layer').")
+        else:
+            print(
+                f"Captured activations: shape={tuple(layer_acts.shape)}, "
+                f"dtype={layer_acts.dtype}"
+            )
+
+        saved_path = wrapper.save_activations(batch_idx=0)
+        print(f"Saved activations to: {saved_path}")
+    finally:
+        if wrapper is not None:
+            wrapper.unregister_hooks()
+
+
+if __name__ == "__main__":
+    main()

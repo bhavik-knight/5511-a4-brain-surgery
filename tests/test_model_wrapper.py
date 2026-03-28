@@ -6,8 +6,8 @@ This test suite validates the ModelWrapper class functionality including:
 - Hook Cleanup: Ensure hooks are properly removed for memory safety
 - Device Consistency: Verify activations are moved to CPU for VRAM management
 
-Uses lightweight test models (tiny-random-GPTJForCausalLM) to avoid OOM on
-constrained hardware like RTX 4070.
+Uses a tiny local model saved to a temp directory to avoid relying on network
+access or a pre-populated Hugging Face cache.
 """
 
 import sys
@@ -330,16 +330,15 @@ class TestModelWrapperInitialization:
             - ModelWrapper attributes are correctly set
             - Model and tokenizer are loaded
         """
-        assert (
-            tiny_model_wrapper.model_name
-            == "hf-internal-testing/tiny-random-GPTJForCausalLM"
-        )
+        assert isinstance(tiny_model_wrapper.model_name, str)
+        assert len(tiny_model_wrapper.model_name) > 0
         assert tiny_model_wrapper.layer_idx == 1
         assert tiny_model_wrapper.model is not None
         assert tiny_model_wrapper.tokenizer is not None
 
     def test_init_with_negative_layer_idx(
         self: "TestModelWrapperInitialization",
+        tiny_local_model_dir: Path,
     ) -> None:
         """Test that negative layer_idx raises ValueError.
 
@@ -348,7 +347,7 @@ class TestModelWrapperInitialization:
         """
         with pytest.raises(ValueError, match="layer_idx must be non-negative"):
             ModelWrapper(
-                model_name="hf-internal-testing/tiny-random-GPTJForCausalLM",
+                model_name=str(tiny_local_model_dir),
                 layer_idx=-1,
             )
 
@@ -422,7 +421,9 @@ class TestHookRegistration:
         assert len(tiny_model_wrapper.hooks) == 0
         assert len(tiny_model_wrapper.activations) == 0
 
-    def test_layer_out_of_range(self: "TestHookRegistration") -> None:
+    def test_layer_out_of_range(
+        self: "TestHookRegistration", tiny_local_model_dir: Path
+    ) -> None:
         """Test that out-of-range layer_idx raises RuntimeError.
 
         Asserts:
@@ -430,7 +431,7 @@ class TestHookRegistration:
         """
         with pytest.raises(RuntimeError, match="exceeds number of layers"):
             ModelWrapper(
-                model_name="hf-internal-testing/tiny-random-GPTJForCausalLM",
+                model_name=str(tiny_local_model_dir),
                 layer_idx=100,
             )
 
@@ -458,7 +459,11 @@ class TestTextGenerationWithActivations:
         )
 
         assert isinstance(text, str)
-        assert len(text) > len(prompt)
+        assert tiny_model_wrapper._last_output_ids is not None
+        prompt_ids = tiny_model_wrapper.tokenizer(prompt, return_tensors="pt")[
+            "input_ids"
+        ][0]
+        assert tiny_model_wrapper._last_output_ids.shape[1] > prompt_ids.numel()
         assert isinstance(activations, dict)
         assert "layer" in activations
 
@@ -570,6 +575,6 @@ class TestModelWrapperStringRepresentation:
         repr_str = repr(tiny_model_wrapper)
 
         assert "ModelWrapper" in repr_str
-        assert "hf-internal-testing/tiny-random-GPTJForCausalLM" in repr_str
+        assert "model_name=" in repr_str
         assert "layer_idx=1" in repr_str
         assert "device=" in repr_str

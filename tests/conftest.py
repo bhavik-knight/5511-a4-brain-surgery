@@ -5,8 +5,9 @@ class with lightweight models to avoid OOM errors on GPU-constrained systems.
 """
 
 import sys
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
+from typing import Any, TypeVar, cast
 
 import pytest
 import torch
@@ -17,13 +18,92 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from brain_surgery.model_wrapper import ModelWrapper
 
 
-@pytest.fixture  # type: ignore[misc]
-def tiny_model_wrapper() -> ModelWrapper:
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def typed_fixture(*args: object, **kwargs: object) -> Callable[[F], F]:
+    """A typed wrapper around pytest.fixture for mypy --strict.
+
+    In some environments, pytest's decorator is treated as untyped (Any), which
+    causes strict mypy to mark decorated fixtures as untyped. This wrapper keeps
+    the original runtime behavior while providing a typed decorator signature.
+    """
+
+    def _decorate(func: F) -> F:
+        return cast(Callable[[F], F], pytest.fixture(*args, **kwargs))(func)
+
+    return _decorate
+
+
+@typed_fixture(scope="session")
+def tiny_local_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Create a tiny local model+tokenizer directory for fully-offline tests.
+
+    This avoids relying on network access or an existing Hugging Face cache.
+
+    Returns:
+        Path: Directory containing a saved model + tokenizer compatible with
+            AutoModelForCausalLM/AutoTokenizer.
+    """
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
+    from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
+
+    out_dir = cast(Path, tmp_path_factory.mktemp("tiny_local_gpt2"))
+
+    vocab = {
+        "<pad>": 0,
+        "<unk>": 1,
+        "<bos>": 2,
+        "<eos>": 3,
+        "Hello": 4,
+        "world": 5,
+        "The": 6,
+        "capital": 7,
+        "of": 8,
+        "France": 9,
+        "is": 10,
+        "Test": 11,
+        "Prompt": 12,
+        "Model": 13,
+        "vs": 14,
+        "activation": 15,
+        "device": 16,
+    }
+
+    tokenizer = cast(Any, Tokenizer)(WordLevel(vocab=vocab, unk_token="<unk>"))
+    tokenizer.pre_tokenizer = Whitespace()
+    hf_tokenizer = cast(Any, PreTrainedTokenizerFast)(
+        tokenizer_object=tokenizer,
+        unk_token="<unk>",
+        pad_token="<pad>",
+        bos_token="<bos>",
+        eos_token="<eos>",
+    )
+    hf_tokenizer.save_pretrained(out_dir)
+
+    config = cast(Any, GPT2Config)(
+        vocab_size=hf_tokenizer.vocab_size,
+        n_layer=2,
+        n_head=2,
+        n_embd=32,
+        bos_token_id=hf_tokenizer.bos_token_id,
+        eos_token_id=hf_tokenizer.eos_token_id,
+        pad_token_id=hf_tokenizer.pad_token_id,
+    )
+    model = cast(Any, GPT2LMHeadModel)(config)
+    model.save_pretrained(out_dir)
+
+    return out_dir
+
+
+@typed_fixture
+def tiny_model_wrapper(tiny_local_model_dir: Path) -> ModelWrapper:
     """Fixture providing a ModelWrapper with a tiny test model.
 
-    Uses hf-internal-testing/tiny-random-GPTJForCausalLM which is specifically
-    designed for testing and is extremely lightweight (~2MB), avoiding OOM
-    issues on constrained hardware like RTX 4070.
+    Uses a tiny local GPT-2 style model saved to a temp directory, avoiding
+    network access and Hugging Face cache assumptions.
 
     Returns:
         ModelWrapper: An initialized ModelWrapper instance with the tiny model
@@ -33,26 +113,10 @@ def tiny_model_wrapper() -> ModelWrapper:
         This fixture is function-scoped (reset for each test) to ensure
         test isolation and avoid state leakage between tests.
     """
-    return ModelWrapper(
-        model_name="hf-internal-testing/tiny-random-GPTJForCausalLM", layer_idx=1
-    )
+    return ModelWrapper(model_name=str(tiny_local_model_dir), layer_idx=1)
 
 
-@pytest.fixture  # type: ignore[misc]
-def gpt2_model_wrapper() -> ModelWrapper:
-    """Fixture providing a ModelWrapper with GPT-2 (small but full model).
-
-    Uses the standard GPT-2 model for tests that need more realistic model
-    behavior while still being quick to load and run.
-
-    Returns:
-        ModelWrapper: An initialized ModelWrapper instance with GPT-2 and
-            layer_idx=4 (middle layers for optimal SAE feature extraction).
-    """
-    return ModelWrapper(model_name="gpt2", layer_idx=4)
-
-
-@pytest.fixture(autouse=True)  # type: ignore[misc]
+@typed_fixture(autouse=True)
 def clear_gpu_cache() -> Generator[None, None, None]:
     """Fixture to clear GPU cache after each test.
 

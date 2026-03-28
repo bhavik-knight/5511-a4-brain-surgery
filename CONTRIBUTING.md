@@ -47,7 +47,7 @@ This ensures all developers use consistent tool versions and configurations.
 
 ### Python Version
 
-- **Minimum:** Python 3.10+
+- **Minimum:** Python 3.12+
 - Use modern Python type hints:
   - ✅ `list[str]` instead of `List[str]`
   - ✅ `dict[str, int]` instead of `Dict[str, int]`
@@ -56,6 +56,10 @@ This ensures all developers use consistent tool versions and configurations.
 ### Type Annotations
 
 **All functions and classes must have complete type annotations.** This is enforced by `mypy` in strict mode.
+
+**Type Safety (Required):**
+- All new modules must pass **pyright** and **mypy** checks.
+- Use `# pyright: ignore[...]` only when dealing with unresolved `transformers` API stubs (and keep the ignore as narrow as possible).
 
 #### Function Example
 
@@ -167,6 +171,20 @@ Run locally:
 ```bash
 uv run mypy .
 ```
+
+If you use VS Code, pyright is commonly provided via the Pylance extension. If you have the CLI installed, ensure pyright reports no errors before opening a PR.
+
+## Data Hygiene
+
+- Large activation files (>50MB) must not be force-added to Git.
+- Verify `.gitignore` is working before pushing new activation batches.
+
+### Canonical Artifact Locations
+
+- Offline model directories: `models/` (e.g., `models/qwen2.5-0.5b/`)
+- Corpora: `data/corpus/`
+- Activation artifacts: `data/activations/`
+- Experiment outputs and plots: `results/` (see `results/metrics/`, `results/features/`, `results/experiments/`)
 
 Fix common issues:
 - Ensure all function parameters have type annotations
@@ -291,6 +309,7 @@ GitHub will automatically load the PR template when you open a new pull request.
 
 ```
 a4-brain-surgery/
+├── models/                       # Local Hugging Face model directories (offline)
 ├── src/
 │   └── brain_surgery/
 │       ├── __init__.py

@@ -12,6 +12,17 @@ This project investigates mechanistic interpretability by training Sparse Autoen
 - Feature interpretation and analysis via backwards mapping
 - Counterfactual experiments with activation clamping
 
+## Documentation
+
+| Assignment Question | Documentation | Source Code |
+| --- | --- | --- |
+| Q1 | [./docs/Q1_model_and_hooks.md](./docs/Q1_model_and_hooks.md) | [./src/brain_surgery/model_wrapper.py](./src/brain_surgery/model_wrapper.py) |
+| Q2 | [./docs/Q2_data_collection_and_storage.md](./docs/Q2_data_collection_and_storage.md) | [./src/brain_surgery/data_gen.py](./src/brain_surgery/data_gen.py) |
+| Q3 | [./docs/Q3_sae_training.md](./docs/Q3_sae_training.md) | [./src/brain_surgery/sae.py](./src/brain_surgery/sae.py) |
+| Q4 | [./docs/Q4_feature_interpretation.md](./docs/Q4_feature_interpretation.md) | [./src/brain_surgery/interpret.py](./src/brain_surgery/interpret.py) |
+| Q5 | [./docs/Q5_feature_labeling_bonus.md](./docs/Q5_feature_labeling_bonus.md) | [./src/brain_surgery/interpret.py](./src/brain_surgery/interpret.py) |
+| Q6 | [./docs/Q6_intervention_and_counterfactuals.md](./docs/Q6_intervention_and_counterfactuals.md) | [./src/brain_surgery/intervention.py](./src/brain_surgery/intervention.py) |
+
 ## 🛠️ Installation
 
 ### Requirements
@@ -42,141 +53,102 @@ This project investigates mechanistic interpretability by training Sparse Autoen
    uv run pytest tests/
    ```
 
-## 🦙 Cross-Platform Local LLM Setup
+## Quick Start (Q1 Verification)
 
-This project uses **Ollama** to run **Qwen 2.5 0.5B** locally for NLP research without relying on cloud APIs.
+Run the Q1 smoke test to verify forward hooks + activation saving locally:
 
-### Installation by Operating System
-
-#### 🐧 Linux (Zorin OS / Ubuntu / Debian)
-
-Run the official installation script:
-```bash
-curl -fsSL https://ollama.ai/install.sh | sh
-```
-
-Verify installation:
-```bash
-ollama --version
-```
-
-Start the Ollama service:
-```bash
-ollama serve
-```
-
----
-
-#### 🍎 macOS
-
-Install via Homebrew:
-```bash
-brew install ollama
-```
-
-Start Ollama:
-```bash
-ollama serve
-```
-
-**Apple Silicon Support (M1/M2/M3):**  
-Ollama automatically detects and enables GPU acceleration on Apple Silicon Macs. This provides significant performance improvements over CPU-only inference.
-
----
-
-#### 🪟 Windows
-
-1. Download the Ollama installer from [ollama.com](https://ollama.com)
-2. Run the `.exe` installer and follow the setup wizard
-3. Launch Ollama from the Start Menu
-
-**Native vs. WSL2:**
-- **Native Installer (Recommended for NVIDIA GPUs):** Works with NVIDIA CUDA support directly
-- **WSL2 Alternative:** If using Docker containers or preferring Linux environment, install Ollama inside Windows Subsystem for Linux 2
-
-Start the service:
-```bash
-ollama serve
-```
-
----
-
-### Model Download
-
-Once Ollama is running, download Qwen 2.5 0.5B:
+Note: this requires a local model directory under `models/` (see “Offline Model Setup (Hugging Face)” below).
 
 ```bash
-ollama pull qwen2.5:0.5b
+uv run python -m brain_surgery.model_wrapper
 ```
 
-This downloads the model (~370MB) to your local Ollama cache. You only need to run this once.
-
-Verify the model is installed:
-```bash
-ollama list
-```
-
----
-
-### Hardware Performance & Memory Expectations
-
-| Hardware | VRAM Usage | Speed | Notes |
-|----------|-----------|-------|-------|
-| **NVIDIA RTX 4070** | ~1.2 GB | ⚡ Fast (~100 tokens/sec) | Optimal for this model |
-| **Apple M1/M2/M3** | ~1 GB | ⚡ Fast (~80-120 tokens/sec) | GPU-accelerated by default |
-| **CPU-Only (Intel/AMD)** | ~2 GB | 🐢 Slow (~5-15 tokens/sec) | Not recommended for inference |
-| **NVIDIA RTX 3060** | ~1 GB | ⚡ Very Fast (~150 tokens/sec) | 12GB VRAM card, good for larger models |
-
-> **Tip:** The Qwen 2.5 0.5B model is lightweight and runs efficiently on most hardware. Even CPU-only inference is viable for development and testing.
-
----
-
-### Environment Variables
-
-If you need to access Ollama from a Docker container or another machine on your network:
-
-#### Set Host to Accept External Connections
+If you see `ModuleNotFoundError: No module named 'brain_surgery'` (common with a `src/` layout), use:
 
 ```bash
-export OLLAMA_HOST=0.0.0.0:11434
-ollama serve
+PYTHONPATH=src uv run python -m brain_surgery.model_wrapper
 ```
 
-Then from another machine or Docker container:
+## Why PyTorch?
+
+This project uses **native PyTorch + Hugging Face Transformers** (not an external LLM runtime) because we need **low-level forward hooks** (`nn.Module.register_forward_hook`) to capture internal residual-stream activations. Those activations are required for SAE training, feature interpretation, and intervention experiments.
+
+## Local Development
+
+For long sessions on an NVIDIA RTX 4070 (12GB VRAM), you generally want to **load the model once** and keep the Python process alive.
+
+Run the project entrypoint in interactive mode:
+
 ```bash
-export OLLAMA_BASE_URL=http://your-machine-ip:11434
+uv run python -i -m brain_surgery.main
 ```
 
-**Default:** Ollama listens on `localhost:11434` (only accessible locally), which is fine for single-machine setups.
+If you see `ModuleNotFoundError: No module named 'brain_surgery'` (common with a `src/` layout), use:
 
----
-
-### Quick Test
-
-Query the model directly via curl:
 ```bash
-curl http://localhost:11434/api/generate -d '{
-  "model": "qwen2.5:0.5b",
-  "prompt": "What is machine learning?",
-  "stream": false
-}'
+PYTHONPATH=src uv run python -i -m brain_surgery.main
 ```
 
----
+Then keep the interactive session open for as long as needed (e.g., 4 hours). As long as the process stays alive and you don’t re-instantiate the model repeatedly, the weights remain resident in VRAM.
+
+### Memory Management
+
+- Avoid launching multiple Python processes that each load the model (VRAM will fill quickly).
+- Reuse a single `ModelWrapper` instance inside loops.
+- When you’re done capturing activations, call `unregister_hooks()` to release hook handles and clear cached activations.
+
+## Offline Model Setup (Hugging Face)
+
+This project loads Qwen **directly via `transformers`** from a local directory (`./models/qwen2.5-0.5b`) so we can register native PyTorch forward hooks.
+
+1) Download once (requires internet):
+
+```bash
+uv run hf download Qwen/Qwen2.5-0.5B --local-dir ./models/qwen2.5-0.5b
+```
+
+If you are not using `uv`, install the CLI with `pip install huggingface-hub` and run:
+
+```bash
+hf download Qwen/Qwen2.5-0.5B --local-dir ./models/qwen2.5-0.5b
+```
+
+2) Run offline:
+- The code uses `local_files_only=True` when calling `from_pretrained(...)`.
+- `brain_surgery.main` sets `TRANSFORMERS_OFFLINE=1` so accidental network calls fail fast.
+
+## Data, Outputs, and Storage Locations
+
+This repo keeps all large and/or generated artifacts in a few predictable folders:
+
+- **Model weights (offline):** `./models/`
+   - Default target: `./models/qwen2.5-0.5b/`
+   - Downloaded once, then loaded with `local_files_only=True`.
+- **Input data (corpus):** `./data/corpus/`
+- **Captured activations:** `./data/activations/` (saved as `.pt` artifacts)
+- **Assignment PDF:** `./data/assignment-4-brain-surgery.pdf`
+- **Results/outputs:** `./results/`
+   - `./results/metrics/` — training curves + evaluation metrics
+   - `./results/features/` — extracted features + human/auto interpretations
+   - `./results/experiments/` — intervention/counterfactual experiment outputs
 
 ## 📁 Project Structure
 
 ```
 a4-brain-surgery/
+├── docs/
+│   └── Q1_model_and_hooks.md        # Q1 write-up and rationale
+├── models/                           # Local Hugging Face model directories (offline)
 ├── src/
 │   └── brain_surgery/
 │       ├── __init__.py
 │       ├── model_wrapper.py          # Q1: ModelWrapper with hooks
-│       ├── activation_capture.py     # Q2: Data loader & activation saving
-│       ├── sparse_autoencoder.py     # Q3: SAE architecture & training
-│       ├── feature_interpretation.py # Q4: Backwards mapping & analysis
-│       ├── feature_labeling.py       # Q5: bonus: LLM-based feature labels
-│       └── intervention.py           # Q6: Clamping & counterfactual exps
+│       ├── data_gen.py               # Q2: Corpus + activation collection
+│       ├── sae.py                    # Q3: SAE architecture + training
+│       ├── interpret.py              # Q4/Q5: Feature interpretation
+│       ├── intervention.py           # Q6: Clamping & counterfactual exps
+│       ├── main.py                   # Interactive entrypoint (keep model in VRAM)
+│       └── utils.py                  # Shared configs + paths
 ├── tests/
 │   ├── test_model_wrapper.py
 │   ├── test_activation_capture.py
@@ -191,8 +163,8 @@ a4-brain-surgery/
 │   ├── metrics/                      # Training curves, evaluation metrics
 │   └── experiments/                  # Counterfactual experiment results
 ├── pyproject.toml                    # Dependencies & project config
-├── ruff.toml                         # Linting & formatting rules
-├── mypy.ini                          # Type checking config
+├── pyrightconfig.json                # Pyright/Pylance type checking config
+├── uv.lock                           # Locked dependency versions for uv
 ├── .pre-commit-config.yaml           # Pre-commit hooks
 ├── CONTRIBUTING.md                   # Contribution guidelines
 ├── WORK_DISTRIBUTION.md              # Team roles & responsibilities
@@ -206,10 +178,10 @@ Implement a `ModelWrapper` class that registers forward hooks on the residual st
 
 **File:** `src/brain_surgery/model_wrapper.py`
 
-- [ ] Load a small LLM (Qwen-2.5-0.5B) using Hugging Face Transformers
-- [ ] Register hooks on layer N's residual stream
-- [ ] Implement `generate_with_activations()` to capture hidden states during generation
-- [ ] Document hook placement rationale and approach limitations
+- [x] Load a small LLM (Qwen-2.5-0.5B) using Hugging Face Transformers
+- [x] Register hooks on layer N's residual stream
+- [x] Implement `generate_with_activations()` to capture hidden states during generation
+- [x] Document hook placement rationale and approach limitations
 
 **Key Classes:**
 - `ModelWrapper(model_name: str, layer_idx: int)`: Wraps the model with hooks
@@ -220,7 +192,7 @@ Implement a `ModelWrapper` class that registers forward hooks on the residual st
 ### **Q2: Data Collection & Activation Storage**
 Build a data pipeline to load a corpus and save computed activations with token-to-activation mappings.
 
-**File:** `src/brain_surgery/activation_capture.py`
+**File:** `src/brain_surgery/data_gen.py`
 
 - [ ] Create a data loader for a corpus (TinyStories or WikiText)
 - [ ] Process batches through the model and capture activations
@@ -238,7 +210,7 @@ Build a data pipeline to load a corpus and save computed activations with token-
 ### **Q3: Sparse Autoencoder Training**
 Implement a SAE with an Encoder-Decoder architecture and tied weights. Train with L₁ regularization.
 
-**File:** `src/brain_surgery/sparse_autoencoder.py`
+**File:** `src/brain_surgery/sae.py`
 
 - [ ] Implement `SparseAutoencoder(input_dim: int, hidden_dim: int)` with tied encoder/decoder weights
 - [ ] Add L₁ loss term: `loss = mse_loss + λ * L1_norm(latents)`
@@ -261,7 +233,7 @@ Implement a SAE with an Encoder-Decoder architecture and tied weights. Train wit
 ### **Q4: Feature Interpretation & Analysis**
 Implement backwards mapping logic and manually identify 3–5 distinct interpretable features.
 
-**File:** `src/brain_surgery/feature_interpretation.py`
+**File:** `src/brain_surgery/interpret.py`
 
 - [ ] Implement backwards mapping: Feature → Activation → Token
 - [ ] Identify top activating combinations (feature + token context)
@@ -277,7 +249,7 @@ Implement backwards mapping logic and manually identify 3–5 distinct interpret
 ### **Q5: Bonus – LLM-based Feature Labeling**
 Query a larger LLM (via API) to automatically label discovered features.
 
-**File:** `src/brain_surgery/feature_labeling.py`
+**File:** `src/brain_surgery/interpret.py`
 
 - [ ] Query a larger model (e.g., Claude, GPT-4) with context snippets
 - [ ] Ask the model to suggest semantic labels for feature activations
@@ -328,50 +300,20 @@ The encoder and decoder share weights (up to transpose), reducing parameters and
 
 2. **Run Q1 – Model Wrapping:**
    ```bash
-   uv run python src/brain_surgery/model_wrapper.py --model qwen-2.5-0.5b --layer 8
+   uv run python -m brain_surgery.model_wrapper
    ```
 
-3. **Run Q2 – Data Collection:**
-   ```bash
-   uv run python src/brain_surgery/activation_capture.py --corpus tinystories --batch_size 32
-   ```
-
-4. **Run Q3 – SAE Training:**
-   ```bash
-   uv run python src/brain_surgery/sparse_autoencoder.py --input_dim 512 --hidden_dim 4096 --l1_coef 0.001
-   ```
-
-5. **Run Q4 – Feature Analysis:**
-   ```bash
-   uv run python src/brain_surgery/feature_interpretation.py --num_features 5
-   ```
-
-6. **Run Q6 – Intervention:**
-   ```bash
-   uv run python src/brain_surgery/intervention.py --features_to_clamp 0,1,2 --num_trials 50
-   ```
+3. **Q2–Q6:**
+   - These modules are scaffolded (`src/brain_surgery/data_gen.py`, `sae.py`, `interpret.py`, `intervention.py`) but the runnable pipelines/CLIs are implemented as each question is completed.
+   - Output conventions are documented in `docs/` and summarized in the “Data, Outputs, and Storage Locations” section above.
 
 ## 📊 Results & Outputs
 
-All results are saved to the `results/` directory:
+All results are saved under `results/` using this convention:
 - **Training metrics:** Loss curves, sparsity plots
 - **Features:** Identified features with example text snippets
 - **Experiments:** Counterfactual results showing causal effects
 - **Visualizations:** Feature correlation matrices, activation distributions
-
-Example outputs:
-```
-results/
-├── features/
-│   ├── feature_0_python_code.txt
-│   ├── feature_1_emotional_tone.txt
-│   └── ...
-├── metrics/
-│   ├── sae_training_loss.png
-│   └── sparsity_over_epochs.png
-└── experiments/
-    └── clamping_effects_summary.json
-```
 
 ## 📖 References
 
