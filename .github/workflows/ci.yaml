@@ -18,13 +18,8 @@ jobs:
       - name: Install Dependencies
         run: uv sync --frozen
 
-      - name: Check Formatting (Rule 3)
-        run: uv run ruff format --check .
+      - name: Pre-commit (format, lint, types, markdown)
+        run: uv run pre-commit run --all-files --show-diff-on-failure
 
-      - name: Lint, Docstrings, & Modern Types (Rules 2, 4, 5)
-        # This will fail if docstrings or type hints are missing
-        # as defined in your pyproject.toml
-        run: uv run ruff check .
-
-      - name: Static Type Checking (Rule 2)
-        run: uv run mypy .
+      - name: Tests
+        run: uv run pytest -q
