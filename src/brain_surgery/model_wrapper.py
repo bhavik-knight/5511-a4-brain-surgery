@@ -75,7 +75,7 @@ class ModelWrapper:
         )
         self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        self.model.to(self.device)
+        self.model.to(self.device)  # pyright: ignore[reportCallIssue]
         self.model.eval()  # Set to evaluation mode
 
         # Storage for captured activations
@@ -102,17 +102,17 @@ class ModelWrapper:
         # Access the model's transformer layers
         if hasattr(self.model, "model"):
             # For models like Qwen that use model.model.layers
-            layers = self.model.model.layers
+            layers = self.model.model.layers  # pyright: ignore[reportAttributeAccessIssue]
         else:
             # Fallback for other architectures
-            layers = self.model.transformer.h
+            layers = self.model.transformer.h  # pyright: ignore[reportAttributeAccessIssue]
 
-        if self.layer_idx >= len(layers):
+        if self.layer_idx >= len(layers):  # pyright: ignore[reportArgumentType]
             raise RuntimeError(
-                f"layer_idx {self.layer_idx} exceeds number of layers ({len(layers)})"
+                f"layer_idx {self.layer_idx} exceeds number of layers ({len(layers)})"  # pyright: ignore[reportArgumentType]
             )
 
-        target_layer = layers[self.layer_idx]
+        target_layer = layers[self.layer_idx]  # pyright: ignore[reportIndexIssue]
 
         # Hook function to capture activations
         def hook_fn(
@@ -139,7 +139,7 @@ class ModelWrapper:
             self.activations["layer"] = hidden_states.detach().cpu()
 
         # Register the hook
-        hook_handle = target_layer.register_forward_hook(hook_fn)
+        hook_handle = target_layer.register_forward_hook(hook_fn)  # pyright: ignore[reportAttributeAccessIssue]
         self.hooks.append(hook_handle)
 
     def unregister_hooks(self: "ModelWrapper") -> None:
@@ -193,11 +193,11 @@ class ModelWrapper:
         inputs = self.tokenizer(
             prompt, return_tensors="pt", truncation=True, max_length=2048
         )
-        input_ids = inputs["input_ids"].to(self.device)
+        input_ids = inputs["input_ids"].to(self.device)  # pyright: ignore[reportAttributeAccessIssue]
 
         # Generate tokens with activation capture
         with torch.no_grad():
-            output_ids = self.model.generate(
+            output_ids = self.model.generate(  # pyright: ignore[reportCallIssue]
                 input_ids,
                 max_new_tokens=max_tokens,
                 temperature=temperature,
@@ -207,7 +207,7 @@ class ModelWrapper:
             )
 
         # Decode the full generated text
-        generated_text: str = self.tokenizer.decode(
+        generated_text: str = self.tokenizer.decode(  # pyright: ignore[reportAssignmentType]
             output_ids[0], skip_special_tokens=True
         )
 
