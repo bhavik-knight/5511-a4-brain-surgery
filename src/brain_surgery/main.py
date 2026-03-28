@@ -2,7 +2,7 @@
 
 This module is intended for interactive development sessions, e.g.:
 
-    PYTHONPATH=src uv run python -i -m brain_surgery.main
+    uv run python -i -m brain_surgery.main
 
 When run with `-i`, the Python process stays alive after initialization and
 keeps model weights resident in GPU VRAM (useful for long sessions).

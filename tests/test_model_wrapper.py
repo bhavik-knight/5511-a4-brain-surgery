@@ -55,9 +55,9 @@ class TestActivationCollection:
 
         assert isinstance(activations, dict), "Activations must be dict"
         assert "layer" in activations, "Expected 'layer' key in activations dict"
-        assert isinstance(
-            activations["layer"], torch.Tensor
-        ), "Activation values must be torch.Tensor"
+        assert isinstance(activations["layer"], torch.Tensor), (
+            "Activation values must be torch.Tensor"
+        )
 
     def test_activations_non_empty(
         self: "TestActivationCollection", tiny_model_wrapper: ModelWrapper
@@ -77,9 +77,9 @@ class TestActivationCollection:
         )
 
         assert len(activations) > 0, "Activations dict must not be empty"
-        assert (
-            activations["layer"].numel() > 0
-        ), "Activation tensor must contain elements"
+        assert activations["layer"].numel() > 0, (
+            "Activation tensor must contain elements"
+        )
 
 
 # ============================================================================
@@ -112,9 +112,9 @@ class TestTensorShapes:
         )
         activation_tensor = activations["layer"]
 
-        assert (
-            activation_tensor.dim() == 3
-        ), f"Expected 3D tensor, got {activation_tensor.dim()}D"
+        assert activation_tensor.dim() == 3, (
+            f"Expected 3D tensor, got {activation_tensor.dim()}D"
+        )
         batch_size, seq_len, hidden_dim = activation_tensor.shape
         assert batch_size > 0, "batch_size must be positive"
         assert seq_len > 0, "sequence_length must be positive"
@@ -146,12 +146,12 @@ class TestTensorShapes:
         batch_sizes = [s[0] for s in shapes]
         hidden_dims = [s[2] for s in shapes]
 
-        assert all(
-            b == batch_sizes[0] for b in batch_sizes
-        ), "batch_size should be consistent"
-        assert all(
-            h == hidden_dims[0] for h in hidden_dims
-        ), "hidden_dim should be consistent"
+        assert all(b == batch_sizes[0] for b in batch_sizes), (
+            "batch_size should be consistent"
+        )
+        assert all(h == hidden_dims[0] for h in hidden_dims), (
+            "hidden_dim should be consistent"
+        )
 
 
 # ============================================================================
@@ -260,9 +260,9 @@ class TestDeviceConsistency:
         )
         activation_tensor = activations["layer"]
 
-        assert (
-            activation_tensor.device.type == "cpu"
-        ), f"Activations must be on CPU, got {activation_tensor.device}"
+        assert activation_tensor.device.type == "cpu", (
+            f"Activations must be on CPU, got {activation_tensor.device}"
+        )
 
     def test_model_device_vs_activation_device(
         self: "TestDeviceConsistency", tiny_model_wrapper: ModelWrapper
@@ -304,9 +304,9 @@ class TestDeviceConsistency:
             text, activations = tiny_model_wrapper.generate_with_activations(
                 prompt=f"Prompt {i}", max_tokens=2
             )
-            assert (
-                activations["layer"].device.type == "cpu"
-            ), f"Activation {i} not on CPU"
+            assert activations["layer"].device.type == "cpu", (
+                f"Activation {i} not on CPU"
+            )
 
 
 # ============================================================================

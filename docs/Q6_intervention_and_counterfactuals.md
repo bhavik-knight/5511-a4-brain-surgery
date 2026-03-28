@@ -12,6 +12,6 @@ Implementation is in `src/brain_surgery/intervention.py`.
 - **Experiment runs / counterfactual outputs:** `results/experiments/`
 - **Metrics / plots / summaries:** `results/metrics/`
 
----
+______________________________________________________________________
 
 This document can be expanded with intervention mechanics, metrics, and experimental results once Q6 is implemented.

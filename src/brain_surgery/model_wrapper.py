@@ -366,13 +366,10 @@ class ModelWrapper:
         self._last_token_strs = list(token_strs)
 
         def _decode_single_token(tid: int) -> str:
-            decoded = cast(
-                str | list[str],
-                self.tokenizer.decode([tid], skip_special_tokens=False),
-            )
+            decoded = self.tokenizer.decode([tid], skip_special_tokens=False)
             if isinstance(decoded, list):
                 return decoded[0] if decoded else ""
-            return decoded
+            return cast(str, decoded)
 
         self._last_token_texts = [_decode_single_token(tid) for tid in token_ids]
 

@@ -21,22 +21,26 @@ Thank you for your interest in contributing to our Sparse Autoencoders and Neura
 ### Development Environment Setup
 
 1. **Clone the repository:**
+
    ```bash
    git clone <repository-url> a4-brain-surgery
    cd a4-brain-surgery
    ```
 
-2. **Install dependencies with uv:**
+1. **Install dependencies with uv:**
+
    ```bash
    uv sync
    ```
 
-3. **Install pre-commit hooks:**
+1. **Install pre-commit hooks:**
+
    ```bash
    pre-commit install
    ```
 
-4. **Verify your setup:**
+1. **Verify your setup:**
+
    ```bash
    uv run pytest
    ```
@@ -58,6 +62,7 @@ This ensures all developers use consistent tool versions and configurations.
 **All functions and classes must have complete type annotations.** This is enforced by `mypy` in strict mode.
 
 **Type Safety (Required):**
+
 - All new modules must pass **pyright** and **mypy** checks.
 - Use `# pyright: ignore[...]` only when dealing with unresolved `transformers` API stubs (and keep the ignore as narrow as possible).
 
@@ -79,7 +84,7 @@ def extract_activations(model_output: dict[str, any], layer: str) -> list[float]
     """
     if layer not in model_output:
         raise ValueError(f"Layer '{layer}' not found in model output")
-    
+
     return model_output[layer]
 ```
 
@@ -96,7 +101,7 @@ class ActivationData(BaseModel):
         activations: Raw activation values.
         model_id: Identifier for the source model.
     """
-    
+
     layer_name: str = Field(..., description="Name of the neural network layer")
     activations: list[float] = Field(..., description="Activation values")
     model_id: str = Field(..., description="Identifier for source model")
@@ -143,7 +148,7 @@ def calculate_reconstruction_loss(
     """
     if len(original) != len(reconstructed):
         raise ValueError("Arrays must have equal length")
-    
+
     return sum((o - r) ** 2 for o, r in zip(original, reconstructed)) / len(original)
 ```
 
@@ -152,12 +157,14 @@ def calculate_reconstruction_loss(
 All code is automatically formatted and linted using **Ruff**. Pre-commit hooks enforce this.
 
 #### Key Ruff rules enforced:
+
 - Line length: 100 characters
 - Unused imports are removed
 - Trailing commas for multi-line structures
 - Sort imports using `isort` plugin
 
 Run before committing:
+
 ```bash
 uv run ruff check --fix .
 uv run ruff format .
@@ -168,6 +175,7 @@ uv run ruff format .
 All code must pass strict mypy type checking. This is enforced in CI/CD.
 
 Run locally:
+
 ```bash
 uv run mypy .
 ```
@@ -187,6 +195,7 @@ If you use VS Code, pyright is commonly provided via the Pylance extension. If y
 - Experiment outputs and plots: `results/` (see `results/metrics/`, `results/features/`, `results/experiments/`)
 
 Fix common issues:
+
 - Ensure all function parameters have type annotations
 - Ensure all function return types are annotated
 - Use `Optional[T]` or `T | None` for nullable types
@@ -200,13 +209,13 @@ Our project uses a **Git Flow** branching model with specific naming conventions
 
 Branch names must follow one of these prefixes:
 
-| Prefix | Usage | Example |
-|--------|-------|---------|
-| `feat/` | New feature | `feat/named-entity-recognition` |
-| `fix/` | Bug fix | `fix/tokenizer-edge-case` |
-| `exp/` | Experimental work | `exp/bert-fine-tuning` |
-| `docs/` | Documentation | `docs/api-reference` |
-| `refactor/` | Code refactoring | `refactor/reduce-complexity` |
+| Prefix      | Usage             | Example                         |
+| ----------- | ----------------- | ------------------------------- |
+| `feat/`     | New feature       | `feat/named-entity-recognition` |
+| `fix/`      | Bug fix           | `fix/tokenizer-edge-case`       |
+| `exp/`      | Experimental work | `exp/bert-fine-tuning`          |
+| `docs/`     | Documentation     | `docs/api-reference`            |
+| `refactor/` | Code refactoring  | `refactor/reduce-complexity`    |
 
 ### Rules
 
@@ -274,17 +283,20 @@ Closes #42"
 When you're ready to submit your changes:
 
 1. **Create and switch to your feature branch:**
+
    ```bash
    git checkout -b feat/your-feature-name
    ```
 
-2. **Make your changes and commit:**
+1. **Make your changes and commit:**
+
    ```bash
    git add .
    git commit -m "feat(scope): description"
    ```
 
-3. **Ensure code quality before pushing:**
+1. **Ensure code quality before pushing:**
+
    ```bash
    uv run ruff check --fix .
    uv run ruff format .
@@ -292,14 +304,16 @@ When you're ready to submit your changes:
    uv run pytest
    ```
 
-4. **Push your branch:**
+1. **Push your branch:**
+
    ```bash
    git push origin feat/your-feature-name
    ```
 
-5. **Open a Pull Request** using the provided [PR template](.github/pull_request_template.md).
+1. **Open a Pull Request** using the provided [PR template](.github/pull_request_template.md).
 
 GitHub will automatically load the PR template when you open a new pull request. Please fill it out completely with:
+
 - A clear description of your changes
 - The type of change (feature, bug fix, experiment, docs, refactor)
 - Evidence that you've verified code quality (`ruff check`, `mypy`, tests)
@@ -393,6 +407,6 @@ uv run mypy src/nlp/preprocessing.py
 - Check existing issues before creating a new one
 - Use discussion threads for questions
 
----
+______________________________________________________________________
 
 **Thank you for contributing! Happy coding! 🧠**

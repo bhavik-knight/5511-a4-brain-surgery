@@ -7,7 +7,7 @@ class with lightweight models to avoid OOM errors on GPU-constrained systems.
 import sys
 from collections.abc import Callable, Generator
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar, cast, overload
 
 import pytest
 import torch
@@ -17,20 +17,36 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from brain_surgery.model_wrapper import ModelWrapper
 
-
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def typed_fixture(*args: object, **kwargs: object) -> Callable[[F], F]:
+@overload
+def typed_fixture(func: F, /) -> F: ...
+
+
+@overload
+def typed_fixture(**kwargs: object) -> Callable[[F], F]: ...
+
+
+def typed_fixture(func: F | None = None, /, **kwargs: object) -> F | Callable[[F], F]:
     """A typed wrapper around pytest.fixture for mypy --strict.
 
-    In some environments, pytest's decorator is treated as untyped (Any), which
-    causes strict mypy to mark decorated fixtures as untyped. This wrapper keeps
-    the original runtime behavior while providing a typed decorator signature.
+    Supports both:
+    - `@typed_fixture`
+    - `@typed_fixture(scope="session", autouse=True, ...)`
     """
+    # Supports both:
+    #   @typed_fixture
+    #   def fx(...): ...
+    # and
+    #   @typed_fixture(scope="session")
+    #   def fx(...): ...
+    if func is not None:
+        return cast(F, pytest.fixture(func))
 
-    def _decorate(func: F) -> F:
-        return cast(Callable[[F], F], pytest.fixture(*args, **kwargs))(func)
+    def _decorate(inner: F) -> F:
+        decorator = cast(Any, pytest.fixture)(**kwargs)
+        return cast(Callable[[F], F], decorator)(inner)
 
     return _decorate
 

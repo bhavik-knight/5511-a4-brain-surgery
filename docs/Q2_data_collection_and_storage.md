@@ -22,6 +22,7 @@ Activation artifacts are stored as `.pt` files under `data/activations/`.
     - `tinystories_train_layer4_shard00_batch0123.pt`
 
 For non-activation outputs, follow the repo’s output folders:
+
 - `results/metrics/` for JSON/CSV metrics and plots
 - `results/experiments/` for intervention/counterfactual outputs
 - `results/features/` for feature reports/snippets
@@ -31,18 +32,21 @@ For non-activation outputs, follow the repo’s output folders:
 To keep handoff and grading simple, save machine-readable outputs with predictable filenames.
 
 - **Corpus / data-collection stats** (Q2) → `results/metrics/`
+
   - Suggested filename:
     - `corpus_stats_{corpus}_{split}.json`
   - Example:
     - `corpus_stats_tinystories_train.json`
 
 - **SAE training metrics** (Q3) → `results/metrics/`
+
   - Suggested filename:
     - `sae_metrics_{corpus}_{split}_layer{layer_idx}.json`
   - Example:
     - `sae_metrics_tinystories_train_layer4.json`
 
 - **Intervention / counterfactual summaries** (Q6) → `results/experiments/`
+
   - Suggested filename:
     - `clamp_summary_{corpus}_{split}_layer{layer_idx}.json`
   - Example:
@@ -53,6 +57,7 @@ If you run multiple experimental settings, add a short suffix like `_v1`, `_topk
 ## Expected Artifact Contents
 
 Activation artifacts written by `ModelWrapper.save_activations()` include:
+
 - `prompt`, `generated_text`
 - `token_ids`, `token_strs`, `token_texts`
 - `activations` (shape: `(seq_len, hidden_dim)`)
@@ -60,8 +65,9 @@ Activation artifacts written by `ModelWrapper.save_activations()` include:
 ## Results/Outputs
 
 Any corpus statistics (counts, shapes, sizes, timing) should be written under:
+
 - `results/metrics/`
 
----
+______________________________________________________________________
 
 This document can be expanded with the final pipeline description, batching strategy, and storage format details once Q2 is implemented.

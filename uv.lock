@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 [[package]]
 name = "a4-brain-surgery"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
     { name = "huggingface-hub" },

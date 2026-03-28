@@ -22,7 +22,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Lint, Docstrings, & Modern Types (Rules 2, 4, 5)
-        # This will fail if docstrings or type hints are missing 
+        # This will fail if docstrings or type hints are missing
         # as defined in your pyproject.toml
         run: uv run ruff check .
 
