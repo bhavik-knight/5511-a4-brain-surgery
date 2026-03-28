@@ -1,6 +1,6 @@
-# Contributing to Brain Surgery NLP
+# Contributing to Brain Surgery SAE
 
-Thank you for your interest in contributing to our NLP project! We welcome contributions from the community. This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to our Sparse Autoencoders and Neural Network Interpretability project! We welcome contributions from the community. This document provides guidelines and instructions for contributing.
 
 ## Table of Contents
 
@@ -15,7 +15,7 @@ Thank you for your interest in contributing to our NLP project! We welcome contr
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.12 or higher
 - [uv](https://docs.astral.sh/uv/) for package management
 
 ### Development Environment Setup
@@ -23,7 +23,7 @@ Thank you for your interest in contributing to our NLP project! We welcome contr
 1. **Clone the repository:**
    ```bash
    git clone <repository-url> a4-brain-surgery
-   cd brain-surgery
+   cd a4-brain-surgery
    ```
 
 2. **Install dependencies with uv:**
@@ -60,23 +60,23 @@ This ensures all developers use consistent tool versions and configurations.
 #### Function Example
 
 ```python
-def preprocess_text(text: str) -> list[str]:
-    """Preprocess raw text into tokenized sentences.
+def extract_activations(model_output: dict[str, any], layer: str) -> list[float]:
+    """Extract neural network activations from a specific layer.
 
     Args:
-        text: The raw input text to preprocess.
+        model_output: Dictionary containing model layer outputs.
+        layer: The target layer name.
 
     Returns:
-        A list of preprocessed sentences.
+        A list of activation values from the specified layer.
 
     Raises:
-        ValueError: If text is empty or None.
+        ValueError: If layer is not found in model output.
     """
-    if not text:
-        raise ValueError("Text cannot be empty")
+    if layer not in model_output:
+        raise ValueError(f"Layer '{layer}' not found in model output")
     
-    sentences = text.split(".")
-    return [s.strip() for s in sentences if s.strip()]
+    return model_output[layer]
 ```
 
 #### Class Example with Pydantic
@@ -84,18 +84,18 @@ def preprocess_text(text: str) -> list[str]:
 ```python
 from pydantic import BaseModel, Field
 
-class MedicalRecord(BaseModel):
-    """Schema for medical records used in the NLP pipeline.
+class ActivationData(BaseModel):
+    """Schema for activation data in the SAE analysis pipeline.
 
     Attributes:
-        patient_id: Unique identifier for the patient.
-        notes: Clinical notes text.
-        timestamp: When the record was created.
+        layer_name: The neural network layer name.
+        activations: Raw activation values.
+        model_id: Identifier for the source model.
     """
     
-    patient_id: str = Field(..., description="Unique patient identifier")
-    notes: str = Field(..., description="Clinical notes text")
-    timestamp: str = Field(default_factory=lambda: str(datetime.now()))
+    layer_name: str = Field(..., description="Name of the neural network layer")
+    activations: list[float] = Field(..., description="Activation values")
+    model_id: str = Field(..., description="Identifier for source model")
 ```
 
 ### Docstrings
@@ -105,41 +105,42 @@ class MedicalRecord(BaseModel):
 #### Module-level docstring
 
 ```python
-"""NLP utilities for brain surgery documentation analysis.
+"""Sparse Autoencoder utilities for neural network interpretation.
 
-This module provides functions for preprocessing, tokenizing, and analyzing
-clinical notes related to neurosurgical procedures.
+This module provides functions for extracting activations, training SAEs,
+and analyzing learned representations in deep neural networks.
 """
 ```
 
 #### Function docstring
 
 ```python
-def calculate_entity_confidence(
-    entities: list[dict[str, str]],
-    threshold: float = 0.8,
-) -> list[dict[str, str | float]]:
-    """Filter entities by confidence threshold.
+def calculate_reconstruction_loss(
+    original: list[float],
+    reconstructed: list[float],
+) -> float:
+    """Calculate reconstruction loss between original and reconstructed activations.
 
     Args:
-        entities: List of entity dictionaries with 'type' and 'text'.
-        threshold: Minimum confidence score (0.0 to 1.0).
+        original: Original activation values.
+        reconstructed: Reconstructed activation values from SAE.
 
     Returns:
-        Filtered list of entities meeting the threshold.
+        Mean squared error loss between original and reconstructed.
 
     Raises:
-        ValueError: If threshold is not between 0 and 1.
+        ValueError: If arrays have different lengths.
 
     Example:
-        >>> entities = [{"type": "PROCEDURE", "confidence": 0.95}]
-        >>> calculate_entity_confidence(entities, threshold=0.9)
-        [{"type": "PROCEDURE", "confidence": 0.95}]
+        >>> orig = [0.1, 0.5, 0.9]
+        >>> recon = [0.12, 0.48, 0.91]
+        >>> calculate_reconstruction_loss(orig, recon)
+        0.000333...
     """
-    if not 0 <= threshold <= 1:
-        raise ValueError(f"Threshold must be between 0 and 1, got {threshold}")
+    if len(original) != len(reconstructed):
+        raise ValueError("Arrays must have equal length")
     
-    return [e for e in entities if e.get("confidence", 0) >= threshold]
+    return sum((o - r) ** 2 for o, r in zip(original, reconstructed)) / len(original)
 ```
 
 ### Linting and Formatting with Ruff
@@ -289,26 +290,34 @@ GitHub will automatically load the PR template when you open a new pull request.
 ## Project Structure
 
 ```
-brain-surgery/
+a4-brain-surgery/
 ├── src/
-│   └── nlp/
+│   └── brain_surgery/
 │       ├── __init__.py
-│       ├── preprocessing.py      # Text cleaning, tokenization
-│       ├── models/
-│       │   ├── __init__.py
-│       │   └── ner.py            # Named entity recognition
-│       └── schemas/
-│           ├── __init__.py
-│           └── medical.py        # Pydantic data schemas
+│       ├── sae.py                  # Sparse Autoencoder implementation
+│       ├── data_gen.py             # Activation data generation
+│       ├── interpret.py            # SAE interpretation utilities
+│       ├── intervention.py         # Network intervention methods
+│       ├── model_wrapper.py        # Model wrapping and interface
+│       ├── main.py                 # Main entry point
+│       └── utils.py                # Utility functions
 ├── tests/
-│   ├── __init__.py
-│   ├── test_preprocessing.py
-│   └── test_models.py
-├── pyproject.toml               # uv configuration, dependencies
-├── ruff.toml                    # Ruff settings
-├── mypy.ini                     # Mypy strict mode config
-├── .pre-commit-config.yaml      # Pre-commit hooks
-└── README.md
+│   ├── test_sae.py                 # SAE module tests
+│   ├── test_activation_capture.py  # Data generation tests
+│   ├── test_intervention.py        # Intervention method tests
+│   └── test_model_wrapper.py       # Model wrapper tests
+├── data/
+│   ├── activations/                # Captured neuron activations
+│   └── corpus/                     # Training corpus data
+├── results/
+│   ├── experiments/                # Experiment outputs
+│   ├── features/                   # Extracted features
+│   └── metrics/                    # Performance metrics
+├── pyproject.toml                  # uv configuration, dependencies
+├── .pre-commit-config.yaml         # Pre-commit hooks
+├── README.md                       # Project documentation
+├── CONTRIBUTING.md                 # This file
+└── LICENSE                         # Project license
 ```
 
 ## Tools Overview
