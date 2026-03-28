@@ -283,7 +283,7 @@ A 4-member team assignment with clearly defined roles and responsibilities. Each
 
 ## 🗓️ Timeline & Milestones
 
-| Week | Milestone | Owner(s) | Status |
+| Day | Milestone | Owner(s) | Status |
 |------|-----------|----------|--------|
 | **1–2** | Repo setup, Q1 model wrapper | Member 1 | ⏳ |
 | **2–3** | Q2 data collection pipeline | Member 2 | ⏳ |
