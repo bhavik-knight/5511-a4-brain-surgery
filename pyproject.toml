@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "a4-brain-surgery"
 version = "0.1.0"
@@ -5,11 +9,15 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "accelerate>=1.10.0",
+    "huggingface-hub>=1.8.0",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
     "pydantic>=2.12.5",
     "pytest>=9.0.2",
     "ruff>=0.15.8",
+    "torch>=2.11.0",
+    "transformers>=5.4.0",
     "ty>=0.0.26",
 ]
 
@@ -21,6 +29,9 @@ extend-exclude = ["data", "results"]
 # D = Docstrings, ANN = Type Annotations, UP = Upgrade (Modern Syntax)
 select = ["D", "ANN", "UP", "E", "F"]
 ignore = ["D100", "D104"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["UP047"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -42,3 +53,8 @@ warn_required_dynamic_aliases = true
 # This specific line fixes the "No .py files found" error
 files = ["src"]
 
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
