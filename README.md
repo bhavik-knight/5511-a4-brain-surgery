@@ -1,4 +1,4 @@
-# Brain Surgery: Mechanistic Interpretability with SAEs
+# Brain Surgery Project
 
 A graduate-level deep learning project implementing Sparse Autoencoders (SAEs) to extract interpretable features from small language models, following Anthropic's *[Scaling Monosemanticity](https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html)* paper.
 
@@ -37,6 +37,7 @@ This project investigates mechanistic interpretability by training Sparse Autoen
 1. **Clone and navigate to the project:**
 
    ```bash
+   git clone https://github.com/bhavik-knight/5511-a4-brain-surgery/ a4-brain-surgery
    cd a4-brain-surgery
    ```
 
@@ -363,6 +364,10 @@ See [LICENSE](LICENSE) for details.
 
 ______________________________________________________________________
 
-**Course:** MCDA 5511 – Deep Learning (Winter 2026)
-**Instructor:** Greg Kirczenow
-**Team Members:** TBD
+**Course:** MCDA 5511 – Deep Learning (Winter 2026)  
+**Instructor:** Mr. Greg Kirczenow, Mr. Somto Muetoe, Dr. Drira, Prof. Neveditsin
+**Team Members:** 
+1. Bhavik Kantilal Bhagat
+2. Miguel Angel Palafox Gomez
+3. Nikola Kriznar
+4. Sridhar Vadla
