@@ -23,6 +23,7 @@ This project investigates mechanistic interpretability by training Sparse Autoen
 
 1. **Clone and navigate to the project:**
    ```bash
+   git clone https://github.com/bhavik-knight/5511-a4-brain-surgery/ a4-brain-surgery
    cd a4-brain-surgery
    ```
 
