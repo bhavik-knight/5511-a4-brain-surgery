@@ -128,7 +128,7 @@ class ModelWrapper:
                 str(model_dir),
                 local_files_only=True,
                 device_map="auto",
-                torch_dtype=torch_dtype,
+                dtype=torch_dtype,
             ),
         )
         self.tokenizer: PreTrainedTokenizer = cast(
