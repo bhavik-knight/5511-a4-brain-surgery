@@ -58,10 +58,16 @@ def run_phase_q4_q5(interpreter: SAEInterpreter) -> None:
 
     top_features = interpreter.rank_features_by_max_activation(top_k=10)
     print("Top 10 features with top 10 activating tokens:")
+    print("  rank | feature | max_activation | top_tokens")
+    print(
+        "  -----+---------+----------------+------------------------------------------"
+    )
     for feature in top_features:
+        rank_raw = feature.get("rank")
         feature_index_raw = feature.get("feature_index")
-        if not isinstance(feature_index_raw, int):
+        if not isinstance(rank_raw, int) or not isinstance(feature_index_raw, int):
             continue
+        rank = rank_raw
         feature_index = feature_index_raw
         max_value = feature.get("max_feature_value")
         max_value_str = (
@@ -72,8 +78,9 @@ def run_phase_q4_q5(interpreter: SAEInterpreter) -> None:
         token_texts = [
             _safe_token_text(example.get("token_text")) for example in top_examples
         ]
+        token_summary = " | ".join(token_texts)
         print(
-            f"  Feature {feature_index:4d} | max={max_value_str} | tokens={token_texts}"
+            f"  {rank:4d} | {feature_index:7d} | {max_value_str:14s} | {token_summary}"
         )
 
     if interpreter.latents is None:
@@ -110,7 +117,7 @@ def _print_elbow_table(feature_profiles: np.ndarray) -> None:
 def _print_dbscan_summary(feature_profiles: np.ndarray) -> None:
     """Run DBSCAN and print density/noise summary as a secondary pass."""
     print("\nDBSCAN secondary pass:")
-    dbscan = DBSCAN(eps=2.0, min_samples=5)
+    dbscan = DBSCAN(eps=0.5, min_samples=5)
     labels = dbscan.fit_predict(feature_profiles)
 
     noise_count = int(np.sum(labels == -1))
