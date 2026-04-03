@@ -1,0 +1,57 @@
+
+========================================================================================
+Pilot Verification Report
+========================================================================================
+Checkpoint: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/models/sae_checkpoint.pt
+Dataset:    /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/data/activations/soccer_activations_dataset.pt
+Model dir:  /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/models/qwen2.5-0.5b
+
+========================================================================================
+Phase 1: Q4/Q5 Interpretability Check
+========================================================================================
+Top 5 features with top 3 activating tokens:
+  Feature  926 | max=82.835548 | tokens=['Why', 'Why', 'Why']
+  Feature  461 | max=82.625671 | tokens=['How', 'How', 'How']
+  Feature 3223 | max=82.166565 | tokens=['Why', 'Why', 'Why']
+  Feature 3148 | max=81.648247 | tokens=['How', 'How', 'How']
+  Feature 3577 | max=80.904945 | tokens=['Why', 'Why', 'Why']
+Running K-Means clustering on 3584 features into 10 clusters...
+
+K-Means cluster summary (10 clusters):
+  Cluster  0 | size=1896 | rep_feature=0 | tokens=[' the', ' the', ' the']
+  Cluster  1 | size= 216 | rep_feature=34 | tokens=['Why', 'Why', 'Why']
+  Cluster  2 | size= 207 | rep_feature=17 | tokens=['Why', 'Why', 'Why']
+  Cluster  3 | size=  91 | rep_feature=58 | tokens=['Why', 'Why', 'Why']
+  Cluster  4 | size= 201 | rep_feature=12 | tokens=['Why', 'Why', 'Why']
+  Cluster  5 | size= 211 | rep_feature=2 | tokens=['Why', 'Why', 'Why']
+  Cluster  6 | size= 201 | rep_feature=7 | tokens=['What', 'What', 'What']
+  Cluster  7 | size= 162 | rep_feature=18 | tokens=['How', 'How', 'How']
+  Cluster  8 | size= 194 | rep_feature=1 | tokens=['How', 'How', 'How']
+  Cluster  9 | size= 205 | rep_feature=19 | tokens=['Why', 'Why', 'Why']
+
+========================================================================================
+Phase 2: Q6 Ronaldo Intervention
+========================================================================================
+Prompt: Who is the better football player, Ronaldo or Messi?
+Token log-prob deltas (clamped - baseline):
+  Ronaldo : not-scored (likely multi-token under tokenizer)
+  Messi   : not-scored (likely multi-token under tokenizer)
+  football: baseline=-13.046875 | clamped=-13.359375 | delta=-0.312500
+  goal    : baseline=-18.406250 | clamped=-18.171875 | delta=+0.234375
+
+========================================================================================
+Phase 3: Dtype Audit
+========================================================================================
+  model.param                 : torch.float16 [OK]
+  sae.encoder_weight          : torch.float32 [OK]
+  dataset.activation_matrix   : torch.float16 [OK]
+  interpreter.latents         : torch.float32 [OK]
+  hook.original_activations   : torch.float16 [OK]
+  hook.modified_activations   : torch.float16 [OK]
+
+Dtype audit passed: all checked tensors are float16 or float32.
+
+========================================================================================
+Verification Complete
+========================================================================================
+All requested pilot checks completed successfully.

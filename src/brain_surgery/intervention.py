@@ -6,14 +6,19 @@ to test causal effects on model behavior.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 import torch
+import torch.nn as nn
 from torch import Tensor
 
 from .model_wrapper import ModelWrapper
 from .sae import SparseAutoencoder
+
+type InterventionValue = str | int | float | Tensor | None
+type InterventionResult = dict[str, InterventionValue]
 
 
 class SAEIntervention:
@@ -65,7 +70,7 @@ class SAEIntervention:
         self.original_activations: Tensor | None = None
         self.modified_activations: Tensor | None = None
 
-        self.hook_handle: Any = None
+        self.hook_handle: torch.utils.hooks.RemovableHandle | None = None
         self.hook_layer_index: int | None = None
         self.hook_layer_name: str | None = None
 
@@ -103,15 +108,17 @@ class SAEIntervention:
 
         self.feature_max_values = torch.max(latents, dim=0).values
 
-    def _get_transformer_blocks(self) -> Any:  # noqa: ANN401
+    def _get_transformer_blocks(self) -> Sequence[nn.Module]:
         """Get transformer block modules from the wrapped model.
 
         Returns:
                 List of transformer block modules.
         """
-        model_any: Any = self.model_wrapper.model
-        if hasattr(model_any, "model") and hasattr(model_any.model, "layers"):
-            return model_any.model.layers
+        model_root = getattr(self.model_wrapper.model, "model", None)
+        if model_root is not None:
+            layers = getattr(model_root, "layers", None)
+            if isinstance(layers, nn.ModuleList):
+                return cast(Sequence[nn.Module], layers)
         raise RuntimeError("Could not detect transformer layers in model")
 
     def remove_hook(self) -> None:
@@ -151,6 +158,10 @@ class SAEIntervention:
 
         self.remove_hook()
 
+        # Persist current intervention config before creating local captures.
+        self.feature_index = feature_index
+        self.clamp_multiplier = clamp_multiplier
+
         model_device = self.model_wrapper.device
         self.sae.to(model_device)
         sae = self.sae
@@ -167,15 +178,17 @@ class SAEIntervention:
         middle_index = len(blocks) // 2
         target_block = blocks[middle_index]
 
-        self.feature_index = feature_index
-        self.clamp_multiplier = clamp_multiplier
         self.hook_layer_index = middle_index
         self.hook_layer_name = f"model.model.layers[{middle_index}]"
 
         self.original_activations = None
         self.modified_activations = None
 
-        def hook_fn(module: Any, inputs: Any, output: Any) -> Any:  # noqa: ANN401
+        def hook_fn(
+            _module: nn.Module,
+            _inputs: tuple[Tensor, ...],
+            output: Tensor | tuple[Tensor, ...],
+        ) -> Tensor | tuple[Tensor, ...]:
             """Intercept, clamp, decode, and return modified activations."""
             if isinstance(output, tuple):
                 hidden_states = output[0]
@@ -184,6 +197,7 @@ class SAEIntervention:
                 hidden_states = output
                 rest = None
 
+            hidden_dtype: torch.dtype = hidden_states.dtype
             hidden_states = hidden_states.to(model_device)
 
             self.original_activations = hidden_states.detach().cpu()
@@ -201,7 +215,7 @@ class SAEIntervention:
             modified_hidden_states = modified_flat_hidden.reshape(
                 batch_size, seq_len, hidden_dim
             )
-            modified_hidden_states = modified_hidden_states.to(hidden_states.dtype)
+            modified_hidden_states = modified_hidden_states.to(hidden_dtype)
 
             self.modified_activations = modified_hidden_states.detach().cpu()
 
@@ -219,7 +233,7 @@ class SAEIntervention:
         max_new_tokens: int = 50,
         temperature: float = 1.0,
         top_p: float = 0.95,
-    ) -> dict[str, Any]:
+    ) -> InterventionResult:
         """Generate text with a specific feature clamped.
 
         Args:
@@ -277,7 +291,7 @@ class SAEIntervention:
             key: value.to(self.model_wrapper.device) for key, value in inputs.items()
         }
 
-        generation_kwargs = {
+        generation_kwargs: dict[str, int | float | bool | None] = {
             "max_new_tokens": max_new_tokens,
             "do_sample": True,
             "temperature": temperature,
@@ -380,7 +394,7 @@ class SAEIntervention:
             ids = self.model_wrapper.tokenizer(token, add_special_tokens=False)[
                 "input_ids"
             ]
-            if len(ids) != 1:
+            if len(ids) < 1:
                 continue
             result[token] = float(log_probs[ids[0]].item())
 

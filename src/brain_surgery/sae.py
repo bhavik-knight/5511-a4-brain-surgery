@@ -6,12 +6,20 @@ ReLU activation, and L1 sparsity penalty for interpretable feature learning.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypedDict
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+
+
+class SAECheckpointPayload(TypedDict):
+    """Typed checkpoint payload persisted to disk."""
+
+    input_dim: int
+    latent_dim: int
+    model_state_dict: dict[str, Tensor]
 
 
 class SparseAutoencoder(nn.Module):  # type: ignore[misc]
@@ -158,7 +166,7 @@ class SparseAutoencoder(nn.Module):  # type: ignore[misc]
             "reconstruction": x_reconstructed,
         }
 
-    def state_dict_for_checkpoint(self) -> dict[str, Any]:
+    def state_dict_for_checkpoint(self) -> SAECheckpointPayload:
         """Build a checkpoint-friendly state dict payload.
 
         Returns:
@@ -167,5 +175,5 @@ class SparseAutoencoder(nn.Module):  # type: ignore[misc]
         return {
             "input_dim": self.input_dim,
             "latent_dim": self.latent_dim,
-            "model_state_dict": self.state_dict(),
+            "model_state_dict": dict(self.state_dict()),
         }

@@ -6,18 +6,39 @@ semantic patterns and feature relationships in the latent space.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypedDict
 
+import numpy as np
+from numpy.typing import NDArray
 from sklearn.cluster import KMeans
 
 from .interpret import SAEInterpreter
+
+
+class ClusterSummary(TypedDict):
+    """Human-readable summary for one feature cluster."""
+
+    cluster_id: int
+    num_features: int
+    feature_indices: list[int]
+    representative_feature: int | None
+    representative_tokens: list[str]
+
+
+class ClusteringResult(TypedDict):
+    """Full K-Means clustering result payload."""
+
+    cluster_labels: NDArray[np.int_]
+    kmeans_model: KMeans
+    clusters: dict[int, list[int]]
+    cluster_summaries: list[ClusterSummary]
 
 
 def cluster_features_kmeans(
     interpreter: SAEInterpreter,
     num_clusters: int = 10,
     random_state: int = 42,
-) -> dict[str, Any]:
+) -> ClusteringResult:
     """Cluster latent features using K-Means.
 
     Groups SAE latent features into conceptual neighborhoods by treating
@@ -59,10 +80,10 @@ def cluster_features_kmeans(
     for feature_idx, cluster_id in enumerate(cluster_labels):
         clusters.setdefault(int(cluster_id), []).append(feature_idx)
 
-    cluster_summaries = []
+    cluster_summaries: list[ClusterSummary] = []
     for cluster_id in range(num_clusters):
         features_in_cluster = clusters.get(cluster_id, [])
-        summary = {
+        summary: ClusterSummary = {
             "cluster_id": cluster_id,
             "num_features": len(features_in_cluster),
             "feature_indices": features_in_cluster,
@@ -74,13 +95,18 @@ def cluster_features_kmeans(
             top_examples = interpreter.get_top_examples_for_feature(
                 feature_index=feature_idx, top_k=5
             )
-            if top_examples and top_examples[0]["feature_value"] > 0:
+            if top_examples:
+                first_value = top_examples[0].get("feature_value")
+                if not (isinstance(first_value, float) and first_value > 0):
+                    continue
                 summary["representative_feature"] = feature_idx
-                summary["representative_tokens"] = [
-                    item["token_text"]
-                    for item in top_examples
-                    if item["feature_value"] > 0
-                ]
+                summary["representative_tokens"] = []
+                for item in top_examples:
+                    feature_value = item.get("feature_value")
+                    token_text = item.get("token_text")
+                    if isinstance(feature_value, float) and feature_value > 0:
+                        if isinstance(token_text, str):
+                            summary["representative_tokens"].append(token_text)
                 break
 
         cluster_summaries.append(summary)
@@ -93,7 +119,7 @@ def cluster_features_kmeans(
     }
 
 
-def print_cluster_analysis(clustering_result: dict[str, Any]) -> None:
+def print_cluster_analysis(clustering_result: ClusteringResult) -> None:
     """Print human-readable cluster analysis.
 
     Args:

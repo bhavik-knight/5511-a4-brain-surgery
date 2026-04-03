@@ -64,6 +64,12 @@ This project investigates mechanistic interpretability by training Sparse Autoen
 
 This project loads Qwen **directly via `transformers`** from a local directory (`./models/qwen2.5-0.5b`) so we can register native PyTorch forward hooks.
 
+### 24-Layer Qwen-2.5-0.5B Setup (Recommended)
+
+- Qwen-2.5-0.5B has **24 transformer layers** and **896 hidden dimension**.
+- The default activation layer is the midpoint: **layer 12** (0-indexed).
+- Verified activation shape from `ModelWrapper` should be `(N, 896)`.
+
 1. Download once (requires internet):
 
 ```bash
@@ -76,7 +82,13 @@ If you are not using `uv`, install the CLI with `pip install huggingface-hub` an
 hf download Qwen/Qwen2.5-0.5B --local-dir ./models/qwen2.5-0.5b
 ```
 
-2. Run offline:
+If you prefer the official Hugging Face CLI, use:
+
+```bash
+huggingface-cli download Qwen/Qwen2.5-0.5B --local-dir ./models/qwen2.5-0.5b
+```
+
+1. Run offline:
 
 - The code uses `local_files_only=True` when calling `from_pretrained(...)`.
 - `brain_surgery.main` sets `TRANSFORMERS_OFFLINE=1` so accidental network calls fail fast.
@@ -89,12 +101,6 @@ Prerequisite: you must have a local model directory under `models/` (see “Offl
 
 ```bash
 uv run python -m brain_surgery.model_wrapper
-```
-
-If you see `ModuleNotFoundError: No module named 'brain_surgery'` (common with a `src/` layout), use:
-
-```bash
-PYTHONPATH=src uv run python -m brain_surgery.model_wrapper
 ```
 
 ## Why PyTorch?
@@ -111,11 +117,26 @@ Run the project entrypoint in interactive mode:
 uv run python -i -m brain_surgery.main
 ```
 
-If you see `ModuleNotFoundError: No module named 'brain_surgery'` (common with a `src/` layout), use:
+## How to Run (Pure uv)
+
+Minimum project flow:
 
 ```bash
-PYTHONPATH=src uv run python -i -m brain_surgery.main
+uv sync
+uv run pytest tests/
+uv run python -m brain_surgery.model_wrapper
+uv run python scripts/train_university.py
 ```
+
+5-epoch pilot with explicit overrides:
+
+```bash
+uv run python scripts/train_university.py --epochs 5 --batch-size 256 --lr 1e-4 --l1 2e-3 --patience 10 --dataset data/activations/soccer_activations_dataset.pt --checkpoint models/sae_checkpoint.pt
+```
+
+Developer guide:
+
+- See `DEVELOPER_GUDIE.md` for architecture mapping, command rationale, and test coverage notes.
 
 Then keep the interactive session open for as long as needed (e.g., 4 hours). As long as the process stays alive and you don’t re-instantiate the model repeatedly, the weights remain resident in VRAM.
 
@@ -142,7 +163,7 @@ This repo keeps all large and/or generated artifacts in a few predictable folder
 
 ## 📁 Project Structure
 
-```
+```text
 a4-brain-surgery/
 ├── docs/
 │   └── Q1_model_and_hooks.md        # Q1 write-up and rationale

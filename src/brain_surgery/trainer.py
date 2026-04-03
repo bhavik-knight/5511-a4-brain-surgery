@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib import import_module
+import os
 from pathlib import Path
-from typing import Any
+from collections.abc import Callable
+from types import ModuleType
+from typing import cast
 
 import torch
 from torch import Tensor
@@ -19,7 +22,7 @@ from torch.utils.tensorboard import SummaryWriter
 from .sae import SparseAutoencoder
 from .utils import MODELS_DIR
 
-_wandb: Any | None
+_wandb: ModuleType | None
 try:
     _wandb = import_module("wandb")
 except ImportError:  # pragma: no cover - optional dependency at runtime
@@ -107,24 +110,37 @@ class SAETrainer:
             self.model.parameters(), lr=self.learning_rate
         )
         self.writer: SummaryWriter | None = None
-        self._wandb: Any | None = _wandb
+        self._wandb: ModuleType | None = _wandb
 
-        self._wandb_run: Any | None = None
+        self._wandb_run: object | None = None
         if self.use_wandb and self._wandb is not None:
-            self._wandb_run = self._wandb.init(
-                project=self.wandb_project,
-                name=self.wandb_run_name,
-                config={
-                    "lr": self.learning_rate,
-                    "l1_coeff": self.l1_lambda,
-                    "batch_size": self.batch_size,
-                    "epochs": self.num_epochs,
-                    "expansion_factor": self.model.latent_dim / self.model.input_dim,
-                    "input_dim": self.model.input_dim,
-                    "latent_dim": self.model.latent_dim,
-                    "device": str(self.device),
-                },
-            )
+            api_key = os.getenv("WANDB_API_KEY")
+            login_fn = getattr(self._wandb, "login", None)
+            if api_key and callable(login_fn):
+                cast_login_fn = cast(Callable[..., object], login_fn)
+                cast_login_fn(key=api_key, relogin=True)
+
+            project = os.getenv("WANDB_PROJECT", self.wandb_project)
+            entity = os.getenv("WANDB_ENTITY")
+            init_fn = getattr(self._wandb, "init", None)
+            if callable(init_fn):
+                cast_init_fn = cast(Callable[..., object], init_fn)
+                self._wandb_run = cast_init_fn(
+                    project=project,
+                    entity=entity,
+                    name=self.wandb_run_name,
+                    config={
+                        "lr": self.learning_rate,
+                        "l1_coeff": self.l1_lambda,
+                        "batch_size": self.batch_size,
+                        "epochs": self.num_epochs,
+                        "expansion_factor": self.model.latent_dim
+                        / self.model.input_dim,
+                        "input_dim": self.model.input_dim,
+                        "latent_dim": self.model.latent_dim,
+                        "device": str(self.device),
+                    },
+                )
 
         if self.use_tensorboard:
             self.tensorboard_log_dir.mkdir(parents=True, exist_ok=True)
@@ -242,15 +258,18 @@ class SAETrainer:
                 print(f"Dead-Neuron Fraction after Epoch 1: {dead_neuron_fraction:.4f}")
 
             if self._wandb_run is not None and self._wandb is not None:
-                self._wandb.log(
-                    {
-                        "epoch": epoch + 1,
-                        "mse_loss": epoch_recon,
-                        "l1_loss": epoch_l1,
-                        "total_loss": epoch_loss,
-                        "dead_neuron_fraction": dead_neuron_fraction_epoch,
-                    }
-                )
+                log_fn = getattr(self._wandb, "log", None)
+                if callable(log_fn):
+                    cast_log_fn = cast(Callable[..., object], log_fn)
+                    cast_log_fn(
+                        {
+                            "epoch": epoch + 1,
+                            "mse_loss": epoch_recon,
+                            "l1_loss": epoch_l1,
+                            "total_loss": epoch_loss,
+                            "dead_neuron_fraction": dead_neuron_fraction_epoch,
+                        }
+                    )
 
             if self.writer is not None:
                 step = epoch + 1
@@ -286,10 +305,21 @@ class SAETrainer:
         torch.save(self.model.state_dict_for_checkpoint(), self.checkpoint_path)
 
         if self._wandb_run is not None and self._wandb is not None:
-            artifact = self._wandb.Artifact("sae-checkpoint", type="model")
-            artifact.add_file(str(self.checkpoint_path))
-            self._wandb_run.log_artifact(artifact)
-            self._wandb_run.finish()
+            artifact_cls = getattr(self._wandb, "Artifact", None)
+            if callable(artifact_cls):
+                artifact = artifact_cls("sae-checkpoint", type="model")
+                add_file_fn = getattr(artifact, "add_file", None)
+                if callable(add_file_fn):
+                    cast_add_file_fn = cast(Callable[..., object], add_file_fn)
+                    cast_add_file_fn(str(self.checkpoint_path))
+                log_artifact_fn = getattr(self._wandb_run, "log_artifact", None)
+                if callable(log_artifact_fn):
+                    cast_log_artifact_fn = cast(Callable[..., object], log_artifact_fn)
+                    cast_log_artifact_fn(artifact)
+            finish_fn = getattr(self._wandb_run, "finish", None)
+            if callable(finish_fn):
+                cast_finish_fn = cast(Callable[..., object], finish_fn)
+                cast_finish_fn()
 
         if self.writer is not None:
             self.writer.flush()

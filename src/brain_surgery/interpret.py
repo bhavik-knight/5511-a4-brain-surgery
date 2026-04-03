@@ -7,12 +7,14 @@ specific latent features, enabling feature interpretation.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import torch
 from torch import Tensor
 
 from .sae import SparseAutoencoder
+
+type MetadataValue = int | float | str | None
+type MetadataRow = dict[str, MetadataValue]
 
 
 class SAEInterpreter:
@@ -41,7 +43,7 @@ class SAEInterpreter:
 
         self.model: SparseAutoencoder | None = None
         self.activation_matrix: Tensor | None = None
-        self.metadata: list[dict[str, Any]] | None = None
+        self.metadata: list[MetadataRow] | None = None
         self.latents: Tensor | None = None
 
     def load(self) -> None:
@@ -95,7 +97,7 @@ class SAEInterpreter:
         self,
         feature_index: int,
         top_k: int = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> list[MetadataRow]:
         """Get tokens most strongly activating a specific feature.
 
         Finds the top-k token activations for a given feature across
@@ -133,7 +135,7 @@ class SAEInterpreter:
             feature_values, k=min(top_k, len(feature_values))
         )
 
-        results: list[dict[str, Any]] = []
+        results: list[MetadataRow] = []
         for rank, (row_idx, value) in enumerate(
             zip(top_indices.tolist(), top_values.tolist()), start=1
         ):
@@ -162,7 +164,7 @@ class SAEInterpreter:
         self,
         row_index: int,
         top_k: int = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> list[MetadataRow]:
         """Get most strongly activated features for a specific token.
 
         Args:
@@ -195,7 +197,7 @@ class SAEInterpreter:
         top_values, top_indices = torch.topk(row_values, k=min(top_k, len(row_values)))
 
         meta = self.metadata[row_index]
-        results: list[dict[str, Any]] = []
+        results: list[MetadataRow] = []
         for rank, (feature_idx, value) in enumerate(
             zip(top_indices.tolist(), top_values.tolist()), start=1
         ):
@@ -213,7 +215,7 @@ class SAEInterpreter:
 
         return results
 
-    def rank_features_by_max_activation(self, top_k: int = 20) -> list[dict[str, Any]]:
+    def rank_features_by_max_activation(self, top_k: int = 20) -> list[MetadataRow]:
         """Rank features by their single strongest activation.
 
         Finds features that maximally activate on specific tokens,
@@ -244,7 +246,7 @@ class SAEInterpreter:
             k=min(top_k, self.latents.shape[1]),
         )
 
-        results: list[dict[str, Any]] = []
+        results: list[MetadataRow] = []
         for rank, (feature_idx, feature_value) in enumerate(
             zip(top_feature_indices.tolist(), top_feature_values.tolist()), start=1
         ):

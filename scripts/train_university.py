@@ -8,9 +8,12 @@ from datetime import datetime, UTC
 from pathlib import Path
 
 import torch
+from dotenv import load_dotenv
 
 from brain_surgery.sae import SparseAutoencoder
 from brain_surgery.trainer import SAETrainer
+
+load_dotenv()
 
 
 def parse_args() -> argparse.Namespace:
@@ -20,7 +23,8 @@ def parse_args() -> argparse.Namespace:
         Parsed argparse namespace.
     """
     parser = argparse.ArgumentParser(
-        description="Train SparseAutoencoder in headless cluster mode."
+        description="Train SparseAutoencoder in headless cluster mode.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--dataset",
@@ -34,7 +38,7 @@ def parse_args() -> argparse.Namespace:
         default=Path("models/sae_checkpoint.pt"),
         help="Checkpoint path for resume/save.",
     )
-    parser.add_argument("--epochs", type=int, default=100, help="Training epochs.")
+    parser.add_argument("--epochs", type=int, default=5, help="Training epochs.")
     parser.add_argument("--batch-size", type=int, default=256, help="Batch size.")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
     parser.add_argument(

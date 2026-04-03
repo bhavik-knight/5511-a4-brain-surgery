@@ -20,7 +20,8 @@ from __future__ import annotations
 # ruff: noqa: ANN101
 
 from pathlib import Path
-from typing import Any, Literal, cast
+from collections.abc import Sequence
+from typing import Literal, cast
 
 import torch
 import torch.nn as nn
@@ -43,6 +44,8 @@ from .utils import (
     ROOT_DIR,
     ensure_dir_exists,
 )
+
+type ActivationPayloadValue = str | int | Tensor | list[str] | None
 
 
 def get_default_device() -> torch.device:
@@ -98,7 +101,7 @@ class ModelWrapper:
     def __init__(
         self,
         model_name: str,
-        layer_idx: int,
+        layer_idx: int | None = None,
         *,
         activation_device: torch.device | Literal["cpu", "model"] = "cpu",
     ) -> None:
@@ -108,6 +111,7 @@ class ModelWrapper:
             model_name: Local directory containing a `transformers`-compatible
                 model + tokenizer (downloaded ahead of time into `./models/`).
             layer_idx: Index of the transformer layer to capture activations from.
+                If None, defaults to the midpoint layer after model load.
                 For Qwen-2.5-0.5B (24 layers), recommended: 12 for middle layer.
                 See get_recommended_layer_idx() for dynamic calculation.
             activation_device: Where to store captured activations.
@@ -119,14 +123,11 @@ class ModelWrapper:
                 12GB) when collecting many prompts / long sequences.
 
         Raises:
-            ValueError: If layer_idx is negative.
+            ValueError: If layer_idx is negative or out of range.
             OSError: If model cannot be downloaded or loaded.
         """
-        if layer_idx < 0:
-            raise ValueError(f"layer_idx must be non-negative, got {layer_idx}")
-
         self.model_name: str = model_name
-        self.layer_idx: int = layer_idx
+        self.layer_idx: int | None = layer_idx
         self.device: torch.device = get_default_device()
 
         model_dir = Path(model_name)
@@ -182,6 +183,21 @@ class ModelWrapper:
         self._last_token_strs: list[str] | None = None
 
         # Register hooks on the target layer
+        if self.layer_idx is None:
+            self.layer_idx = self.total_layers // 2
+            print(
+                "Defaulting to layer "
+                f"{self.layer_idx} (midpoint of {self.total_layers} layers)"
+            )
+
+        if self.layer_idx < 0:
+            raise ValueError(f"layer_idx must be non-negative, got {self.layer_idx}")
+        if self.layer_idx >= self.total_layers:
+            raise ValueError(
+                "layer_idx out of range: "
+                f"{self.layer_idx} >= total_layers ({self.total_layers})"
+            )
+
         self._register_hooks()
 
     def is_loaded(self) -> bool:
@@ -219,9 +235,29 @@ class ModelWrapper:
         if hasattr(self.model, "config") and hasattr(
             self.model.config, "num_hidden_layers"
         ):
-            return self.model.config.num_hidden_layers  # type: ignore
+            num_hidden_layers = getattr(self.model.config, "num_hidden_layers")
+            if isinstance(num_hidden_layers, int):
+                return num_hidden_layers
 
         raise RuntimeError("Could not detect total layer count from model config")
+
+    def _resolve_transformer_layers(self) -> Sequence[nn.Module]:
+        """Resolve transformer blocks across supported architecture layouts."""
+        model_root = getattr(self.model, "model", None)
+        if model_root is not None:
+            layers = getattr(model_root, "layers", None)
+            if isinstance(layers, nn.ModuleList):
+                return cast(Sequence[nn.Module], layers)
+
+        transformer_root = getattr(self.model, "transformer", None)
+        if transformer_root is not None:
+            layers = getattr(transformer_root, "h", None)
+            if isinstance(layers, nn.ModuleList):
+                return cast(Sequence[nn.Module], layers)
+
+        raise RuntimeError(
+            "Unsupported model architecture: cannot locate transformer layers"
+        )
 
     def _register_hooks(self) -> None:
         """Register forward hooks on the residual stream of the target layer.
@@ -244,22 +280,17 @@ class ModelWrapper:
         """
         # Access the model's transformer layers.
         # Different architectures expose layers under different attribute paths.
-        model_any: Any = self.model
-        if hasattr(model_any, "model") and hasattr(model_any.model, "layers"):
-            layers = model_any.model.layers
-        elif hasattr(model_any, "transformer") and hasattr(model_any.transformer, "h"):
-            layers = model_any.transformer.h
-        else:
+        layers = self._resolve_transformer_layers()
+        if self.layer_idx is None:
+            raise RuntimeError("layer_idx must be set before registering hooks")
+        layer_idx = self.layer_idx
+
+        if layer_idx >= len(layers):
             raise RuntimeError(
-                "Unsupported model architecture: cannot locate transformer layers"
+                f"layer_idx {layer_idx} exceeds number of layers ({len(layers)})"
             )
 
-        if self.layer_idx >= len(layers):  # pyright: ignore[reportArgumentType]
-            raise RuntimeError(
-                f"layer_idx {self.layer_idx} exceeds number of layers ({len(layers)})"  # pyright: ignore[reportArgumentType]
-            )
-
-        target_layer: nn.Module = cast(nn.Module, layers[self.layer_idx])
+        target_layer: nn.Module = cast(nn.Module, layers[layer_idx])
 
         # Hook function to capture activations
         def hook_fn(
@@ -390,8 +421,12 @@ class ModelWrapper:
         )
 
         # Generate tokens with activation capture
+        generate_fn = getattr(self.model, "generate", None)
+        if not callable(generate_fn):
+            raise RuntimeError("Loaded model does not expose a callable generate().")
+
         with torch.no_grad():
-            generate_out = cast(Any, self.model).generate(
+            generate_out = generate_fn(
                 input_ids,
                 attention_mask=attention_mask,
                 max_new_tokens=max_tokens,
@@ -407,7 +442,12 @@ class ModelWrapper:
             output_ids = generate_out
         else:
             # Some configs return a Generate*Output; sequences holds the token ids.
-            output_ids = cast(Tensor, generate_out.sequences)
+            sequences = getattr(generate_out, "sequences", None)
+            if not isinstance(sequences, torch.Tensor):
+                raise RuntimeError(
+                    "Model generate() output is missing tensor sequences"
+                )
+            output_ids = sequences
 
         # Combine activation steps into a single tensor
         if self._activation_steps:
@@ -552,7 +592,7 @@ class ModelWrapper:
             token_ids_1d = token_ids_1d[:seq_len]
             acts_2d = acts_2d[:seq_len]
 
-        payload: dict[str, Any] = {
+        payload: dict[str, ActivationPayloadValue] = {
             "model_name": self.model_name,
             "layer_idx": self.layer_idx,
             "device": str(self.device),
