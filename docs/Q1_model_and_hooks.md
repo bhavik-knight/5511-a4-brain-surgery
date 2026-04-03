@@ -39,7 +39,7 @@ Empirically and conceptually, **middle layers** often provide a good tradeoff:
 - **Late layers**: more specialized toward the model’s final prediction objective; features can become more entangled with the output head and task-specific circuitry
 - **Middle layers**: frequently contain a blend of semantics + syntax with enough abstraction to form reusable features while still being relatively interpretable
 
-For Qwen-2.5-0.5B (8 layers), we default to a mid-layer (e.g., layer 4).
+For Qwen-2.5-0.5B (24 layers), we default to a mid-layer (e.g., layer 12).
 
 ______________________________________________________________________
 

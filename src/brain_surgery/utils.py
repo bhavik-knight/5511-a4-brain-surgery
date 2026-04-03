@@ -6,11 +6,16 @@ enables easy switching of models, datasets, and output directories without
 modifying core code.
 
 Typical usage:
-    >>> from brain_surgery.utils import ROOT_DIR, DATA_DIR, get_device
+    >>> from brain_surgery.utils import (
+    ...     ROOT_DIR, DATA_DIR, get_device, get_recommended_layer_idx
+    ... )
     >>> print(f"Project root: {ROOT_DIR}")
     >>> print(f"Data directory: {DATA_DIR}")
     >>> device = get_device()
     >>> print(f"Using device: {device}")
+    >>> # For Qwen2.5-0.5B (24 layers), get recommended middle layer
+    >>> recommended = get_recommended_layer_idx(24)
+    >>> print(f"Recommended layer: {recommended}")  # Output: 12
 """
 
 from pathlib import Path
@@ -88,6 +93,27 @@ def get_device_name() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
+def get_recommended_layer_idx(num_layers: int) -> int:
+    """Get recommended middle layer index for SAE feature extraction.
+
+    For optimal SAE feature extraction, use the middle transformer layer
+    to balance early syntax patterns with late semantic specialization.
+
+    Args:
+        num_layers: Total number of transformer layers in the model.
+
+    Returns:
+        Recommended layer index (0-indexed).
+
+    Example:
+        >>> # For Qwen2.5-0.5B (24 layers)
+        >>> recommended = get_recommended_layer_idx(24)
+        >>> print(recommended)
+        12
+    """
+    return num_layers // 2
+
+
 # ============================================================================
 # CONFIGURATION CONSTANTS
 # ============================================================================
@@ -95,8 +121,10 @@ def get_device_name() -> str:
 # Default model for Q1 (local directory; downloaded once, then used offline)
 DEFAULT_MODEL_NAME: str = str(MODELS_DIR / "qwen2.5-0.5b")
 
-# Default layer index for 0.5B models (middle layers recommended)
-DEFAULT_LAYER_IDX: int = 4
+# Default layer index for Qwen2.5-0.5B (24 layers)
+# NOTE: Recommended is get_recommended_layer_idx(24) = 12. Users can override via:
+# ModelWrapper(model_name, layer_idx=12) or layer_idx=get_recommended_layer_idx(24).
+DEFAULT_LAYER_IDX: int = 12
 
 # Default generation parameters
 DEFAULT_MAX_TOKENS: int = 50

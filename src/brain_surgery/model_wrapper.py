@@ -6,7 +6,7 @@ Activations are extracted from the residual stream of middle transformer layers,
 enabling mechanistic interpretability analysis via Sparse Autoencoders.
 
 Typical usage:
-    >>> wrapper = ModelWrapper(model_name="./models/qwen2.5-0.5b", layer_idx=4)
+    >>> wrapper = ModelWrapper(model_name="./models/qwen2.5-0.5b", layer_idx=12)
     >>> text, activations = wrapper.generate_with_activations(
     ...     prompt="The capital of France is",
     ...     max_tokens=20
@@ -40,10 +40,37 @@ from .utils import (
     DEFAULT_LAYER_IDX,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
-    DEVICE,
     ROOT_DIR,
     ensure_dir_exists,
 )
+
+
+def get_default_device() -> torch.device:
+    """Get appropriate device with priority: CUDA > DirectML > CPU.
+
+    Detects the best available device for computation on the current system,
+    with fallback hierarchy: NVIDIA CUDA → Windows DirectML → CPU.
+
+    Returns:
+        Device object for torch operations (cuda, directml, or cpu).
+
+    Example:
+        >>> device = get_default_device()
+        >>> print(f"Using device: {device}")
+        Using device: cuda  # or directml / cpu
+    """
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+
+    try:
+        import torch_directml
+
+        if torch_directml.is_available():
+            return torch_directml.device()
+    except ImportError:
+        pass
+
+    return torch.device("cpu")
 
 
 class ModelWrapper:
@@ -58,12 +85,12 @@ class ModelWrapper:
         layer_idx: Index of the transformer layer to hook (0-indexed).
         model: The loaded pre-trained language model.
         tokenizer: The tokenizer for the model.
-        device: Device on which the model runs (cuda or cpu).
+        device: Device on which the model runs (cuda, directml, or cpu).
         activations: Dictionary storing captured activations by layer.
         hooks: List of registered hook handles for cleanup.
 
     Example:
-        >>> wrapper = ModelWrapper("./models/qwen2.5-0.5b", layer_idx=4)
+        >>> wrapper = ModelWrapper("./models/qwen2.5-0.5b", layer_idx=12)
         >>> text, acts = wrapper.generate_with_activations("Hello", max_tokens=10)
         >>> print(acts.shape)  # (seq_len, hidden_dim)
     """
@@ -81,7 +108,8 @@ class ModelWrapper:
             model_name: Local directory containing a `transformers`-compatible
                 model + tokenizer (downloaded ahead of time into `./models/`).
             layer_idx: Index of the transformer layer to capture activations from.
-                For Qwen-2.5-0.5B (8 layers), recommended: 3-5 for middle layers.
+                For Qwen-2.5-0.5B (24 layers), recommended: 12 for middle layer.
+                See get_recommended_layer_idx() for dynamic calculation.
             activation_device: Where to store captured activations.
                 - "cpu" (default): move activations off-GPU immediately.
                 - "model": keep activations on the same device as the model.
@@ -99,7 +127,7 @@ class ModelWrapper:
 
         self.model_name: str = model_name
         self.layer_idx: int = layer_idx
-        self.device: torch.device = DEVICE
+        self.device: torch.device = get_default_device()
 
         model_dir = Path(model_name)
         if not model_dir.is_absolute():
@@ -155,6 +183,45 @@ class ModelWrapper:
 
         # Register hooks on the target layer
         self._register_hooks()
+
+    def is_loaded(self) -> bool:
+        """Check if model and tokenizer are initialized.
+
+        Returns:
+            True if both model and tokenizer are loaded, False otherwise.
+        """
+        return self.model is not None and self.tokenizer is not None
+
+    @property
+    def total_layers(self) -> int:
+        """Get the total number of transformer layers in the model.
+
+        Dynamically detects the layer count from the loaded model's config,
+        supporting multiple architecture types (Qwen, GPT, LLaMA, etc.).
+
+        Returns:
+            Total number of transformer blocks in the model.
+
+        Raises:
+            RuntimeError: If model is not loaded (call is_loaded() first).
+            RuntimeError: If unable to detect layer count from model config.
+
+        Example:
+            >>> wrapper = ModelWrapper(...)
+            >>> total = wrapper.total_layers
+            >>> print(f"Model has {total} layers")
+            Model has 24 layers
+        """
+        if not self.is_loaded():
+            raise RuntimeError("Model not loaded. Call load model first.")
+
+        # Try to get num_hidden_layers from config
+        if hasattr(self.model, "config") and hasattr(
+            self.model.config, "num_hidden_layers"
+        ):
+            return self.model.config.num_hidden_layers  # type: ignore
+
+        raise RuntimeError("Could not detect total layer count from model config")
 
     def _register_hooks(self) -> None:
         """Register forward hooks on the residual stream of the target layer.
@@ -567,23 +634,23 @@ class ModelWrapper:
 
 
 # ============================================================================
-# LAYER SELECTION GUIDANCE FOR 0.5B PARAMETER MODELS
+# LAYER SELECTION GUIDANCE FOR TRANSFORMER MODELS
 # ============================================================================
-# For Qwen-2.5-0.5B and similar 0.5B models:
-#
-# Architecture: Typically 8 transformer layers with ~128 hidden dim
+# For Qwen-2.5-0.5B (24 transformer layers, 896 hidden dim):
 #
 # Layer Selection Recommendations:
-# - Layer 0-1: Early layers capture low-level syntax/tokens
-# - Layer 2-3: Early-middle layers (slightly entangled features)
-# - Layer 4-5: MIDDLE LAYERS (RECOMMENDED for SAEs) ← Best interpretability
+# - Layer 0-5: Early layers capture low-level syntax/tokens
+# - Layer 6-11: Early-middle layers (slightly entangled features)
+# - Layer 12-17: MIDDLE LAYERS (RECOMMENDED for SAEs) ← Best interpretability
 #   * Balance between early token-level and late semantic features
 #   * Sufficient abstraction while maintaining interpretability
 #   * Good feature separation for sparse decomposition
-# - Layer 6-7: Late layers capture high-level semantic/context
+#   * Dynamic calculation: use get_recommended_layer_idx(24) = 12
+# - Layer 18-23: Late layers capture high-level semantic/context
 #
-# Specific Recommendation: Use layer_idx=4 (5th layer, 0-indexed)
+# Specific Recommendation: Use layer_idx=12 (0-indexed)
 # This layer captures rich, interpretable features for mechanistic analysis.
+# Or use: layer_idx=get_recommended_layer_idx(model.config.num_hidden_layers)
 # ============================================================================
 
 
