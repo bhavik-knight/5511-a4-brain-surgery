@@ -3,7 +3,7 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "a4-brain-surgery"
+name = "brain_surgery"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -15,6 +15,7 @@ dependencies = [
     "pre-commit>=4.5.1",
     "pydantic>=2.12.5",
     "pytest>=9.0.2",
+    "python-dotenv>=1.2.2",
     "ruff>=0.15.8",
     "scikit-learn>=1.8.0",
     "tensorboard>=2.20.0",
@@ -35,6 +36,7 @@ ignore = ["D100", "D104"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/conftest.py" = ["UP047"]
+"tests/**/*.py" = ["D"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -61,3 +63,10 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["brain_surgery*"]
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+brain-surgery = { path = ".", editable = true }
