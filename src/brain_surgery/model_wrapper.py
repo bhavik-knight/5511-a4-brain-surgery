@@ -140,14 +140,14 @@ class ModelWrapper:
 
         # Load model and tokenizer from local disk (offline).
         # Use BFLOAT16 + device_map='auto' on CUDA for A100 VRAM efficiency.
-        torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+        dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
         self.model: PreTrainedModel = cast(
             PreTrainedModel,
             AutoModelForCausalLM.from_pretrained(
                 str(model_dir),
                 local_files_only=True,
                 device_map="auto",
-                torch_dtype=torch_dtype,
+                dtype=dtype,
             ),
         )
         self.tokenizer: PreTrainedTokenizer = cast(
