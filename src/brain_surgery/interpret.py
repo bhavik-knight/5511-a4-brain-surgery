@@ -50,7 +50,9 @@ class SAEInterpreter:
         Raises:
                 ValueError: If metadata and activation matrix counts don't match.
         """
-        checkpoint = torch.load(self.checkpoint_path, map_location="cpu")
+        checkpoint = torch.load(
+            self.checkpoint_path, map_location="cpu", weights_only=True
+        )
 
         input_dim = checkpoint["input_dim"]
         latent_dim = checkpoint["latent_dim"]
@@ -60,7 +62,7 @@ class SAEInterpreter:
         self.model.to(self.device)
         self.model.eval()
 
-        dataset = torch.load(self.dataset_path, map_location="cpu")
+        dataset = torch.load(self.dataset_path, map_location="cpu", weights_only=True)
         self.activation_matrix = dataset["activation_matrix"]
         self.metadata = dataset["metadata"]
 

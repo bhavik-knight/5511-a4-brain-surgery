@@ -81,7 +81,7 @@ class SAEIntervention:
             raise ValueError("checkpoint_path must be provided to load SAE")
 
         checkpoint_file = Path(self.checkpoint_path).expanduser().resolve()
-        checkpoint = torch.load(checkpoint_file, map_location="cpu")
+        checkpoint = torch.load(checkpoint_file, map_location="cpu", weights_only=True)
         input_dim = checkpoint["input_dim"]
         latent_dim = checkpoint["latent_dim"]
 

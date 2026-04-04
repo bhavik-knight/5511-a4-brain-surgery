@@ -39,56 +39,66 @@ pre-commit install
 uv run pytest tests/
 ```
 
-Model weights (offline local directory expected at `models/qwen2.5-0.5b`):
+Model weights (offline local directory expected at `models/qwen2.5-7b`):
 
 ```bash
-uv run hf download Qwen/Qwen2.5-0.5B --local-dir ./models/qwen2.5-0.5b
+uv run hf download Qwen/Qwen2.5-7B --local-dir ./models/qwen2.5-7b
 ```
 
-## Quick Start (Local Verification)
-
-Use this 3-command verification flow with a shared run id:
+Use this streamlined workflow to capture activations and train the SAE:
 
 ```bash
-uv run python scripts/train_university.py --smoke-test --run-id run_YYYYMMDD_HHMM
-uv run python scripts/verify_pilot.py --run-id run_YYYYMMDD_HHMM
-uv run python scripts/generate_report.py --run-id run_YYYYMMDD_HHMM
+# Step 1: Capture residual-stream activations (saved to data/activations/)
+uv run python -m brain_surgery.data_gen
+
+# Step 2: Train SAE on captured activations
+uv run python scripts/train_university.py --run-id run_YYYYMMDD_HHMM
 ```
 
 ## Usage Guide
 
-The standard workflow is a 3-step run pipeline.
+The standard research workflow is a two-step pipeline.
 
-1. Train SAE (smoke test or full run)
+### Step 1: Data Capture (Residual Stream Extraction)
+
+Before training, you must extract activation tensors from the LLM. This module runs the prompt corpus through the model hooks and saves a consolidated dataset.
+
+**Pre-requisite:** Ensure the local data directory exists:
+`mkdir -p data/activations/`
 
 ```bash
+uv run python -m brain_surgery.data_gen
+```
+
+- **Security Note:** All internal loading (including `torch.load` calls for datasets and checkpoints) uses `weights_only=True` to prevent arbitrary code execution from untrusted pickles.
+
+### Step 2: SAE Training
+
+Train the Sparse Autoencoder on the captured activation matrix.
+
+```bash
+# Full training run
+uv run python scripts/train_university.py --run-id run_YYYYMMDD_HHMM
+
+# Or run a quick smoke test (1 epoch on 5-prompt subset)
 uv run python scripts/train_university.py --smoke-test --run-id run_YYYYMMDD_HHMM
 ```
 
-For full training, remove `--smoke-test` and tune training flags as needed.
+For full training, tune training flags (e.g., `--l1`, `--epochs`) as needed.
 
-2. Verify pilot (Q4-Q6) with run-scoped paths
+### Step 3: Verification and Reporting
+
+Verify pilot results (Q4-Q6) and generate an executive summary.
 
 ```bash
+# Verify clusters, purity, and interventions
 uv run python scripts/verify_pilot.py --run-id run_YYYYMMDD_HHMM
-```
 
-Checkpoint resolution order is:
-
-1. `--checkpoint` (if explicitly provided)
-
-1. `results/experiments/<run_id>/checkpoints/sae_best.pt`
-
-1. global fallback checkpoint
-
-1. Generate executive summary report
-
-```bash
+# Generate executive summary report (JSON)
 uv run python scripts/generate_report.py --run-id run_YYYYMMDD_HHMM
 ```
 
-This writes `executive_summary.json` in
-`results/experiments/<run_id>/`.
+Checkpoint resolution follows the experiment hierarchy: `results/experiments/<run_id>/checkpoints/sae_best.pt`.
 
 ## What Is Finalized
 

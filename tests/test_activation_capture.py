@@ -53,7 +53,7 @@ def test_activation_collector_load(tmp_path: Path) -> None:
     }
     torch.save(original, path)
 
-    loaded = torch.load(path, map_location="cpu")
+    loaded = torch.load(path, map_location="cpu", weights_only=True)
     assert isinstance(loaded["activations"], torch.Tensor)
     assert isinstance(loaded["token_ids"], torch.Tensor)
     assert loaded["activations"].dtype == torch.float32
