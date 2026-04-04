@@ -111,21 +111,31 @@ def create_run_output_dirs(run_id: str) -> RunDirs:
 
     Returns:
         Dictionary of created paths with keys:
-            - ``root``
+            - ``root`` / ``experiment_root``
+            - ``features_root`` / ``features_run``
+            - ``metrics_root`` / ``metrics_run``
             - ``checkpoints``
-            - ``clusters``
             - ``interventions``
             - ``plots``
             - ``logs``
     """
-    run_root = ensure_dir_exists(RESULTS_DIR / run_id)
+    experiment_root = ensure_dir_exists(EXPERIMENTS_DIR / run_id)
+    features_root = ensure_dir_exists(FEATURES_DIR)
+    metrics_root = ensure_dir_exists(METRICS_DIR)
+    features_run = ensure_dir_exists(FEATURES_DIR / run_id)
+    metrics_run = ensure_dir_exists(METRICS_DIR / run_id)
+
     return {
-        "root": run_root,
-        "checkpoints": ensure_dir_exists(run_root / "checkpoints"),
-        "clusters": ensure_dir_exists(run_root / "clusters"),
-        "interventions": ensure_dir_exists(run_root / "interventions"),
-        "plots": ensure_dir_exists(run_root / "plots"),
-        "logs": ensure_dir_exists(run_root / "logs"),
+        "root": experiment_root,
+        "experiment_root": experiment_root,
+        "features_root": features_root,
+        "metrics_root": metrics_root,
+        "features_run": features_run,
+        "metrics_run": metrics_run,
+        "checkpoints": ensure_dir_exists(experiment_root / "checkpoints"),
+        "interventions": ensure_dir_exists(experiment_root / "interventions"),
+        "plots": ensure_dir_exists(experiment_root / "plots"),
+        "logs": ensure_dir_exists(experiment_root / "logs"),
     }
 
 

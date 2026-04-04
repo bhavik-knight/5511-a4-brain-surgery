@@ -29,8 +29,8 @@ from brain_surgery.utils import (
 
 DEFAULT_CHECKPOINT = CHECKPOINTS_DIR / "sae_checkpoint.pt"
 DEFAULT_DATASET = ACTIVATIONS_DIR / "soccer_activations_dataset.pt"
-DEFAULT_ELBOW_START_K = 4
-DEFAULT_ELBOW_STEP = 4
+DEFAULT_ELBOW_START_K = 2
+DEFAULT_ELBOW_STEP = 1
 DEFAULT_ELBOW_MAX_K = 40
 
 
@@ -114,7 +114,8 @@ def run_phase_q4_q5(
     elbow_start_k: int = DEFAULT_ELBOW_START_K,
     elbow_step: int = DEFAULT_ELBOW_STEP,
     elbow_max_k: int = DEFAULT_ELBOW_MAX_K,
-    elbow_csv_path: Path | None = None,
+    top_features_csv_path: Path | None = None,
+    elbow_json_path: Path | None = None,
     dbscan_json_path: Path | None = None,
 ) -> None:
     """Run feature interpretation and clustering summary for Q4/Q5."""
@@ -126,6 +127,7 @@ def run_phase_q4_q5(
     print(
         "  -----+---------+----------------+------------------------------------------"
     )
+    top_feature_rows: list[dict[str, object]] = []
     for feature in top_features:
         rank_raw = feature.get("rank")
         feature_index_raw = feature.get("feature_index")
@@ -143,22 +145,33 @@ def run_phase_q4_q5(
             _safe_token_text(example.get("token_text")) for example in top_examples
         ]
         token_summary = " | ".join(token_texts)
+        top_feature_rows.append(
+            {
+                "rank": rank,
+                "feature_index": feature_index,
+                "max_activation": max_value_str,
+                "top_tokens": token_summary,
+            }
+        )
         print(
             f"  {rank:4d} | {feature_index:7d} | {max_value_str:14s} | {token_summary}"
         )
+
+    if top_features_csv_path is not None:
+        _save_top_features_csv(top_feature_rows, top_features_csv_path)
 
     if interpreter.latents is None:
         raise RuntimeError("Interpreter latents missing. Call compute_latents() first.")
 
     feature_profiles = interpreter.latents.T.cpu().numpy()
-    best_k, elbow_rows = _print_elbow_table(
+    best_k, elbow_records = _print_elbow_table(
         feature_profiles,
         start_k=elbow_start_k,
         step=elbow_step,
         max_k=elbow_max_k,
     )
-    if elbow_csv_path is not None:
-        _save_elbow_table_csv(elbow_rows, elbow_csv_path)
+    if elbow_json_path is not None:
+        _save_elbow_sweep_json(elbow_records, elbow_json_path)
 
     dbscan_summary = _print_dbscan_summary(interpreter, feature_profiles, best_k)
     if dbscan_json_path is not None:
@@ -187,7 +200,7 @@ def _print_elbow_table(
     start_k: int,
     step: int,
     max_k: int,
-) -> tuple[int, list[tuple[int, float]]]:
+) -> tuple[int, list[dict[str, object]]]:
     """Print SSE sweep and return automatically selected elbow k."""
     if step <= 0:
         raise ValueError(f"step must be positive, got {step}")
@@ -202,11 +215,19 @@ def _print_elbow_table(
     print("  --+----------------")
     k_values = list(range(start_k, max_k + 1, step))
     inertias: list[float] = []
+    elbow_records: list[dict[str, object]] = []
     for k in k_values:
         model = KMeans(n_clusters=k, random_state=42, n_init=10)
         model.fit(feature_profiles)
         inertia = float(model.inertia_)
         inertias.append(inertia)
+        elbow_records.append(
+            {
+                "k": int(k),
+                "inertia": inertia,
+                "cluster_centers": model.cluster_centers_.tolist(),
+            }
+        )
         print(f"  {k:3d} | {inertia:14.4f}")
 
     # Elbow heuristic: pick the point with max perpendicular distance to
@@ -225,18 +246,27 @@ def _print_elbow_table(
         best_k = int(k_values[best_idx])
 
     print(f"\nEstimated elbow k: {best_k}")
-    elbow_rows = list(zip(k_values, inertias))
-    return best_k, elbow_rows
+    return best_k, elbow_records
 
 
-def _save_elbow_table_csv(rows: list[tuple[int, float]], csv_path: Path) -> None:
+def _save_top_features_csv(rows: list[dict[str, object]], csv_path: Path) -> None:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["k", "inertia_sse"])
-        for k, inertia in rows:
-            writer.writerow([k, f"{inertia:.6f}"])
-    print(f"Saved elbow table CSV: {csv_path}")
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=["rank", "feature_index", "max_activation", "top_tokens"],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    print(f"Saved top features CSV: {csv_path}")
+
+
+def _save_elbow_sweep_json(records: list[dict[str, object]], json_path: Path) -> None:
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    with json_path.open("w", encoding="utf-8") as fh:
+        json.dump({"elbow_sweep": records}, fh, indent=2)
+    print(f"Saved elbow sweep JSON: {json_path}")
 
 
 def _print_dbscan_summary(
@@ -540,10 +570,11 @@ def main() -> None:
     dataset_path = args.dataset
     run_id = args.run_id or generate_run_id()
     run_dirs = create_run_output_dirs(run_id)
-    elbow_csv_path = run_dirs["clusters"] / "elbow_sse.csv"
-    dbscan_json_path = run_dirs["clusters"] / "dbscan_summary.json"
-    intervention_csv_path = run_dirs["interventions"] / "logprob_deltas.csv"
-    metadata_json_path = run_dirs["root"] / "metadata.json"
+    top_features_csv_path = run_dirs["features_run"] / "top_10_features.csv"
+    elbow_json_path = run_dirs["metrics_root"] / "elbow_sweep.json"
+    dbscan_json_path = run_dirs["metrics_run"] / "dbscan_summary.json"
+    intervention_csv_path = run_dirs["experiment_root"] / "intervention_results.csv"
+    metadata_json_path = run_dirs["experiment_root"] / "metadata.json"
 
     _print_header("Pilot Verification Report")
     print(f"Run ID:     {run_id}")
@@ -567,7 +598,8 @@ def main() -> None:
         elbow_start_k=args.elbow_start_k,
         elbow_step=args.elbow_step,
         elbow_max_k=args.elbow_max_k,
-        elbow_csv_path=elbow_csv_path,
+        top_features_csv_path=top_features_csv_path,
+        elbow_json_path=elbow_json_path,
         dbscan_json_path=dbscan_json_path,
     )
 

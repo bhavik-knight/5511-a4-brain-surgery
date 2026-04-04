@@ -140,14 +140,15 @@ def main() -> None:
             tensorboard_log_dir=tensorboard_dir,
         )
 
-        _, summary = trainer.train(activation_matrix)
-        summary_path = run_dirs["root"] / "training_summary.json"
+        history, summary = trainer.train(activation_matrix)
+        summary_path = run_dirs["metrics_root"] / f"training_losses_{run_id}.json"
         with summary_path.open("w", encoding="utf-8") as fh:
             json.dump(
                 {
                     "run_id": run_id,
                     "dataset": str(args.dataset),
                     "checkpoint": str(checkpoint_path),
+                    "loss_history": history,
                     "epochs": summary.epochs,
                     "final_loss": summary.final_loss,
                     "dead_neuron_fraction": summary.dead_neuron_fraction,
