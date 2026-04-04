@@ -1,17 +1,49 @@
-# Q6 — Intervention & Counterfactual Experiments
+# Q6 - Intervention and Counterfactuals
 
-Implementation is in `src/brain_surgery/intervention.py`.
+Implementation file: `src/brain_surgery/intervention.py`
 
-## Inputs
+## Theoretical Goal
 
-- **Base model:** loaded offline from `models/` (default: `models/qwen2.5-0.5b/`)
-- **(If used) activations / SAE features:** derived from `data/activations/` and `results/features/`
+Test causal influence of latent features by forcing feature activation during
+generation and comparing next-token probabilities with controlled baselines.
 
-## Outputs (Repo Convention)
+Intervention rule:
 
-- **Experiment runs / counterfactual outputs:** `results/experiments/`
-- **Metrics / plots / summaries:** `results/metrics/`
+$$
+z_j \\leftarrow \\alpha \\cdot \\max(z_j)
+$$
 
-______________________________________________________________________
+where $j$ is a target feature and $\\alpha$ is a clamp multiplier.
 
-This document can be expanded with intervention mechanics, metrics, and experimental results once Q6 is implemented.
+## Implementation
+
+- Supports checkpoint-aware SAE loading in `SAEIntervention` for robust run
+  portability.
+- Hooks into generation-time hidden states, applies encode-clamp-decode
+  transformation, and writes modified activations back into the forward pass.
+- Compares baseline logits with target-feature and control-feature clamps.
+
+## Results
+
+- Q6 reporting uses a specificity logic:
+
+$$
+\\Delta\_{\\text{target}} = p\_{\\text{target}} - p\_{\\text{baseline}}, \\quad
+\\Delta\_{\\text{control}} = p\_{\\text{control}} - p\_{\\text{baseline}}
+$$
+
+$$
+\\mathrm{Specificity\\ Score} = \\Delta\_{\\text{target}} - \\Delta\_{\\text{control}}
+$$
+
+- Positive specificity suggests the target feature has a stronger causal effect
+  than an unrelated control feature.
+- Intervention outputs are stored per run in
+  `results/experiments/<run_id>/intervention_results.csv` and summarized in the
+  executive report pipeline.
+
+## Code Entry Points
+
+- Intervention core: `src/brain_surgery/intervention.py` -> `SAEIntervention`
+- Next-token scoring: `src/brain_surgery/intervention.py` -> `compare_next_token_logprobs(...)`
+- Q6 phase runner: `scripts/verify_pilot.py` -> `run_phase_q6(...)`

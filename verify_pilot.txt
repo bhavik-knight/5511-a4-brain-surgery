@@ -1,0 +1,91 @@
+
+========================================================================================
+Pilot Verification Report
+========================================================================================
+Checkpoint: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/models/sae_checkpoint.pt
+Dataset:    /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/data/activations/soccer_activations_dataset.pt
+Model dir:  /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/models/qwen2.5-0.5b
+
+========================================================================================
+Phase 1: Q4/Q5 Interpretability Check
+========================================================================================
+Top 10 features with top 10 activating tokens:
+  rank | feature | max_activation | top_tokens
+  -----+---------+----------------+------------------------------------------
+     1 |     926 | 82.835548      | Why | Why | Why | Why | How | How | How | How | How | What
+     2 |     461 | 82.625671      | How | How | How | How | How | Why | Why | Why | Why | What
+     3 |    3223 | 82.166565      | Why | Why | Why | Why | How | How | How | How | How | What
+     4 |    3148 | 81.648247      | How | How | How | How | How | Why | Why | Why | Why | What
+     5 |    3577 | 80.904945      | Why | Why | Why | Why | How | How | How | How | How | What
+     6 |    3209 | 80.783134      | Why | Why | Why | Why | How | How | How | How | How | What
+     7 |    2472 | 80.222748      | How | How | How | How | How | Why | Why | Why | Why | What
+     8 |    3233 | 79.867950      | Why | Why | Why | Why | How | How | How | How | How | What
+     9 |     302 | 79.087822      | Why | Why | Why | Why | How | How | How | How | How | What
+    10 |    1056 | 78.663673      | Why | Why | Why | Why | How | How | How | How | How | What
+
+Elbow diagnostics (K-Means SSE sweep):
+  start_k=4, step=4, max_k=40
+  k | inertia (SSE)
+  --+----------------
+    4 |  10005944.0000
+    8 |   4076429.0000
+   12 |   2994981.0000
+   16 |   2586630.7500
+   20 |   2411085.5000
+   24 |   2299293.2500
+   28 |   2206652.2500
+   32 |   2142493.0000
+   36 |   2096004.2500
+   40 |   2049958.5000
+
+Estimated elbow k: 12
+
+DBSCAN secondary pass:
+  clusters_found=1 | noise_features=162 | eps=37.320955 | tuned_from_elbow_k=12
+
+  Top 10 DBSCAN clusters with 10 representative tokens:
+  cluster | size | tokens
+  --------+------+-----------------------------------------------
+        0 | 3422 | How | Why | What | Describe | Ex | of | the | a | is | in
+Running K-Means clustering on 3584 features into 12 clusters...
+
+K-Means cluster summary (12 clusters):
+  Cluster  0 | size= 200 | rep_feature=35 | tokens=['Why', 'Why', 'Why']
+  Cluster  1 | size= 572 | rep_feature=5 | tokens=[' Copa', ' book', ' Copa']
+  Cluster  2 | size= 165 | rep_feature=18 | tokens=['How', 'How', 'How']
+  Cluster  3 | size= 158 | rep_feature=7 | tokens=['What', 'What', 'What']
+  Cluster  4 | size= 168 | rep_feature=17 | tokens=['Why', 'Why', 'Why']
+  Cluster  5 | size= 179 | rep_feature=34 | tokens=['Why', 'Why', 'Why']
+  Cluster  6 | size= 182 | rep_feature=42 | tokens=['Why', 'Why', 'Why']
+  Cluster  7 | size= 184 | rep_feature=2 | tokens=['Why', 'Why', 'Why']
+  Cluster  8 | size= 177 | rep_feature=1 | tokens=['How', 'How', 'How']
+  Cluster  9 | size=  82 | rep_feature=58 | tokens=['Why', 'Why', 'Why']
+  Cluster 10 | size=1326 | rep_feature=0 | tokens=[' the', ' the', ' the']
+  Cluster 11 | size= 191 | rep_feature=12 | tokens=['Why', 'Why', 'Why']
+
+========================================================================================
+Phase 2: Q6 Ronaldo Intervention
+========================================================================================
+Prompt: Who is the better football player, Ronaldo or Messi?
+Token log-prob deltas (target feature vs control feature):
+  Ronaldo : baseline=-10.757812 | target_delta=-8.804688 | control_delta=+0.531250 | specificity=-9.335938
+  Messi   : baseline=-12.109375 | target_delta=-6.484375 | control_delta=-1.156250 | specificity=-5.328125
+  football: baseline=-13.046875 | target_delta=-0.312500 | control_delta=-0.500000 | specificity=+0.187500
+  goal    : baseline=-18.406250 | target_delta=+0.234375 | control_delta=+0.703125 | specificity=-0.468750
+
+========================================================================================
+Phase 3: Dtype Audit
+========================================================================================
+  model.param                 : torch.float16 [OK]
+  sae.encoder_weight          : torch.float32 [OK]
+  dataset.activation_matrix   : torch.float16 [OK]
+  interpreter.latents         : torch.float32 [OK]
+  hook.original_activations   : torch.float16 [OK]
+  hook.modified_activations   : torch.float16 [OK]
+
+Dtype audit passed: all checked tensors are float16 or float32.
+
+========================================================================================
+Verification Complete
+========================================================================================
+All requested pilot checks completed successfully.

@@ -1,0 +1,11 @@
+rank,feature_index,max_activation,top_tokens
+1,2912,77.978821,How | How | How | How | How | Why | Why | Why | Why | What
+2,1917,76.914169,Why | Why | Why | Why | How | How | How | How | How | What
+3,999,75.924393,Why | Why | Why | Why | How | How | How | How | How | What
+4,2825,74.288559,How | How | How | How | How | Why | Why | Why | Why | What
+5,3524,74.059555,How | How | How | How | How | Why | Why | Why | Why | What
+6,109,74.009979,Why | Why | Why | Why | How | How | How | How | How | What
+7,1086,73.523468,Why | Why | Why | Why | How | How | How | How | How | What
+8,1068,73.074776,Why | Why | Why | Why | How | How | How | How | How | What
+9,2,72.918526,Why | Why | Why | Why | How | How | How | How | How | What
+10,1274,72.867874,Why | Why | Why | Why | How | How | How | How | How | What

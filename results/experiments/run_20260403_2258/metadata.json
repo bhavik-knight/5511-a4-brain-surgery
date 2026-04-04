@@ -1,0 +1,133 @@
+{
+  "total_rows": 12075,
+  "required_fields": [
+    "category",
+    "subcategory",
+    "topic",
+    "tags",
+    "era",
+    "region"
+  ],
+  "field_non_null_counts": {
+    "category": 0,
+    "subcategory": 0,
+    "topic": 0,
+    "tags": 0,
+    "era": 0,
+    "region": 0
+  },
+  "category_activation_counts": {},
+  "all_required_fields_present": false,
+  "sample_rows": [
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 0,
+      "token_id": 15191,
+      "token_text": "Who",
+      "token_str": "Who",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    },
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 1,
+      "token_id": 2765,
+      "token_text": " won",
+      "token_str": "\u0120won",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    },
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 2,
+      "token_id": 279,
+      "token_text": " the",
+      "token_str": "\u0120the",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    },
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 3,
+      "token_id": 43642,
+      "token_text": " FIFA",
+      "token_str": "\u0120FIFA",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    },
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 4,
+      "token_id": 4337,
+      "token_text": " World",
+      "token_str": "\u0120World",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    },
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 5,
+      "token_id": 10861,
+      "token_text": " Cup",
+      "token_str": "\u0120Cup",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    },
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 6,
+      "token_id": 304,
+      "token_text": " in",
+      "token_str": "\u0120in",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    },
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 7,
+      "token_id": 220,
+      "token_text": " ",
+      "token_str": "\u0120",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    },
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 8,
+      "token_id": 17,
+      "token_text": "2",
+      "token_str": "2",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    },
+    {
+      "prompt_id": 0,
+      "prompt_text": "Who won the FIFA World Cup in 2022?",
+      "token_index": 9,
+      "token_id": 15,
+      "token_text": "0",
+      "token_str": "0",
+      "generated_text": "Who won the FIFA World Cup in 2022? The FIFA World Cup 2022 was won by South Korea and Japan. The two teams played in a three-legged semifinal, with the winner advancing to the final. The final was held on June 12, 2022, in Sao Paulo, Brazil. The final was won by the South Korean team, who defeated the Japanese team in the final.",
+      "hook_layer_index": 12,
+      "hook_layer_name": "model.model.layers[12]"
+    }
+  ]
+}

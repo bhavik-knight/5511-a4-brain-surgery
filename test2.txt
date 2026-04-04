@@ -1,0 +1,93 @@
+
+========================================================================================
+Pilot Verification Report
+========================================================================================
+Run ID:     run_20260403_2322
+Run dir:    /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2322
+Checkpoint: results/experiments/run_20260403_2322/checkpoints/sae_best.pt
+Dataset:    data/activations/soccer_activations_dataset.pt
+Model dir:  /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/models/qwen2.5-0.5b
+
+========================================================================================
+Phase 1: Q4/Q5 Interpretability Check
+========================================================================================
+Top 10 features with top 10 activating tokens:
+  rank | feature | max_activation | top_tokens
+  -----+---------+----------------+------------------------------------------
+     1 |    2912 | 77.978821      | How | How | How | How | How | Why | Why | Why | Why | What
+     2 |    1917 | 76.914169      | Why | Why | Why | Why | How | How | How | How | How | What
+     3 |     999 | 75.924393      | Why | Why | Why | Why | How | How | How | How | How | What
+     4 |    2825 | 74.288559      | How | How | How | How | How | Why | Why | Why | Why | What
+     5 |    3524 | 74.059555      | How | How | How | How | How | Why | Why | Why | Why | What
+     6 |     109 | 74.009979      | Why | Why | Why | Why | How | How | How | How | How | What
+     7 |    1086 | 73.523468      | Why | Why | Why | Why | How | How | How | How | How | What
+     8 |    1068 | 73.074776      | Why | Why | Why | Why | How | How | How | How | How | What
+     9 |       2 | 72.918526      | Why | Why | Why | Why | How | How | How | How | How | What
+    10 |    1274 | 72.867874      | Why | Why | Why | Why | How | How | How | How | How | What
+Saved top features CSV: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/features/run_20260403_2322/top_10_features.csv
+
+Normalizing features for Spherical K-Means to mitigate the curse of dimensionality.
+
+Elbow diagnostics (Spherical K-Means SSE sweep):
+  start_k=4, step=2, max_k=20
+  k | inertia (SSE)
+  --+----------------
+    4 |      1232.4332
+    6 |      1210.3820
+    8 |      1190.0588
+   10 |      1177.6379
+   12 |      1166.9207
+   14 |      1158.4056
+   16 |      1155.1523
+   18 |      1152.7331
+   20 |      1146.8150
+
+Estimated elbow k: 8
+Saved elbow sweep JSON: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/metrics/elbow_sweep.json
+Saved elbow plot PNG: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/metrics/elbow_plot.png
+Running Spherical K-Means clustering on 3584 features into 8 clusters...
+
+Spherical K-Means cluster summary (8 clusters):
+  rep_feature = Centroid-Proximal Feature (closest feature to the cluster centroid), representing the core semantic direction.
+  cluster | size | cohesion | rep_feature | top_10_tokens
+  --------+------+----------+-------------+--------------------------------
+        0 | 1628 | 0.9943   | 3524        | How | How | How | How | How | Why | Why | Why | Why | What
+        1 |  384 | 0.7206   | 1048        | play | in | sweating | leagues | League | ble | create | Liga | season | ball
+        2 |  435 | 0.7398   | 3551        | frequent | anticipate | fans | control | the | anticipate | Manuel | team | team | the
+        3 |  278 | 0.4469   | 2145        | Barcelona | as | u | Cl | Cl | Cam | Spain | Barcelona | Der | Champions
+        4 |  229 | 0.5760   | 1681        | unique | able | soccer | work | able | rich | rich | quality | legacy | able
+        5 |  239 | 0.5296   | 1198        | the | of | of | of | the | the | single | the | the | left
+        6 |  256 | 0.4068   | 3528        | able | able | able | ability | ability | ability | ability | ability | ability | stop
+        7 |  135 | 0.8866   | 3055        | How | How | How | How | How | Describe | Describe | Describe | Describe | Describe
+Saved cluster report JSON: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2322/cluster_report.json
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  39%|███▊      | 112/290 [00:00<00:00, 1103.83it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1615.85it/s]
+
+========================================================================================
+Phase 2: Q6 Ronaldo Intervention
+========================================================================================
+Prompt: Who is the better football player, Ronaldo or Messi?
+Token log-prob deltas (target feature vs control feature):
+  Ronaldo : not-scored (likely multi-token under tokenizer)
+  Messi   : not-scored (likely multi-token under tokenizer)
+  football: baseline=-13.046875 | target_delta=-3.234375 | control_delta=-5.984375 | specificity=+2.750000
+  goal    : baseline=-18.406250 | target_delta=-2.203125 | control_delta=+5.187500 | specificity=-7.390625
+Saved intervention deltas CSV: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2322/intervention_results.csv
+
+========================================================================================
+Phase 3: Dtype Audit
+========================================================================================
+  model.param                 : torch.float16 [OK]
+  sae.encoder_weight          : torch.float32 [OK]
+  dataset.activation_matrix   : torch.float16 [OK]
+  interpreter.latents         : torch.float32 [OK]
+  hook.original_activations   : torch.float16 [OK]
+  hook.modified_activations   : torch.float16 [OK]
+Saved metadata audit JSON: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2322/metadata.json
+WARNING: Metadata audit incomplete: required rich metadata fields are missing. Continuing for smoke-test compatibility.
+
+Dtype audit passed: all checked tensors are float16 or float32.
+
+========================================================================================
+Verification Complete
+========================================================================================
+All requested pilot checks completed successfully.

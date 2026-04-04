@@ -8,8 +8,6 @@ When run with `-i`, the Python process stays alive after initialization and
 keeps model weights resident in GPU VRAM (useful for long sessions).
 """
 
-from __future__ import annotations
-
 # ruff: noqa: E402
 
 import os

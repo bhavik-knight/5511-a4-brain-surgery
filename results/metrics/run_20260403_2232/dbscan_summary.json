@@ -1,0 +1,24 @@
+{
+  "elbow_k": 8,
+  "eps": 36.431266403198244,
+  "clusters_found": 1,
+  "noise_features": 196,
+  "top_clusters": [
+    {
+      "cluster_id": 0,
+      "size": 3388,
+      "top_tokens": [
+        "How",
+        "Why",
+        "What",
+        "Describe",
+        "Ex",
+        "of",
+        "the",
+        "a",
+        "Who",
+        "is"
+      ]
+    }
+  ]
+}

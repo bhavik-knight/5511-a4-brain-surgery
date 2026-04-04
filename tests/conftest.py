@@ -1,150 +1,174 @@
-"""Pytest configuration and fixtures for model_wrapper tests.
-
-This module provides reusable pytest fixtures for testing the ModelWrapper
-class with lightweight models to avoid OOM errors on GPU-constrained systems.
-"""
+"""Shared pytest fixtures for the brain_surgery test suite."""
 
 import sys
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, TypeVar, cast, overload
+from types import SimpleNamespace
+from typing import Self
 
 import pytest
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-# Add src to path so we can import brain_surgery module
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from brain_surgery.model_wrapper import ModelWrapper
-
-F = TypeVar("F", bound=Callable[..., Any])
-
-
-@overload
-def typed_fixture(func: F, /) -> F: ...
+from brain_surgery.sae import SparseAutoencoder
 
 
-@overload
-def typed_fixture(**kwargs: object) -> Callable[[F], F]: ...
+class FakeTokenizer:
+    """Minimal tokenizer stub for deterministic unit tests."""
+
+    pad_token_id: int | None = 0
+    eos_token_id: int | None = 1
+    pad_token: str | None = "<pad>"
+    eos_token: str | None = "<eos>"
+
+    def __call__(
+        self,
+        text: str,
+        return_tensors: str | None = None,
+        truncation: bool | None = None,
+        max_length: int | None = None,
+        padding: bool | None = None,
+        add_special_tokens: bool = True,
+    ) -> dict[str, torch.Tensor | list[int]]:
+        if return_tensors == "pt":
+            ids = [2, 3, 4, 5]
+            return {
+                "input_ids": torch.tensor([ids], dtype=torch.long),
+                "attention_mask": torch.ones((1, len(ids)), dtype=torch.long),
+            }
+
+        token_to_id = {
+            "Ronaldo": 10,
+            "Messi": 11,
+            "goal": 12,
+            "football": 13,
+        }
+        token = text.strip()
+        return {"input_ids": [token_to_id.get(token, 99)]}
+
+    def decode(
+        self, token_ids: object, skip_special_tokens: bool = True
+    ) -> str | list[str]:
+        _ = skip_special_tokens
+        if isinstance(token_ids, torch.Tensor):
+            token_ids = token_ids.tolist()
+
+        normalized_ids: list[int] = []
+        if isinstance(token_ids, int):
+            normalized_ids = [token_ids]
+        elif isinstance(token_ids, list):
+            if token_ids and isinstance(token_ids[0], list):
+                nested = token_ids[0]
+                normalized_ids = [int(tid) for tid in nested if isinstance(tid, int)]
+            else:
+                normalized_ids = [int(tid) for tid in token_ids if isinstance(tid, int)]
+
+        return " ".join(f"tok{tid}" for tid in normalized_ids)
+
+    def convert_ids_to_tokens(self, token_ids: list[int]) -> list[str] | str:
+        return [f"tok{tid}" for tid in token_ids]
 
 
-def typed_fixture(func: F | None = None, /, **kwargs: object) -> F | Callable[[F], F]:
-    """A typed wrapper around pytest.fixture for mypy --strict.
+class FakeLayer(nn.Module):  # type: ignore[misc]
+    """Simple layer that preserves hidden state shape."""
 
-    Supports both:
-    - `@typed_fixture`
-    - `@typed_fixture(scope="session", autouse=True, ...)`
-    """
-    # Supports both:
-    #   @typed_fixture
-    #   def fx(...): ...
-    # and
-    #   @typed_fixture(scope="session")
-    #   def fx(...): ...
-    if func is not None:
-        return cast(F, pytest.fixture(func))
+    def __init__(self, hidden_dim: int = 896) -> None:
+        super().__init__()
+        self.bias = nn.Parameter(torch.zeros(hidden_dim))
 
-    def _decorate(inner: F) -> F:
-        decorator = cast(Any, pytest.fixture)(**kwargs)
-        return cast(Callable[[F], F], decorator)(inner)
-
-    return _decorate
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return hidden_states + self.bias
 
 
-@typed_fixture(scope="session")
-def tiny_local_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Create a tiny local model+tokenizer directory for fully-offline tests.
+class FakeCausalLM(nn.Module):  # type: ignore[misc]
+    """Tiny model stub exposing a 24-layer Qwen-like structure."""
 
-    This avoids relying on network access or an existing Hugging Face cache.
+    def __init__(
+        self, layers: int = 24, hidden_dim: int = 896, vocab_size: int = 64
+    ) -> None:
+        super().__init__()
+        self.config = SimpleNamespace(num_hidden_layers=layers)
+        self.model = SimpleNamespace(
+            layers=nn.ModuleList([FakeLayer(hidden_dim) for _ in range(layers)])
+        )
+        self._dummy = nn.Parameter(torch.zeros(1))
+        self.hidden_dim = hidden_dim
+        self.vocab_size = vocab_size
 
-    Returns:
-        Path: Directory containing a saved model + tokenizer compatible with
-            AutoModelForCausalLM/AutoTokenizer.
-    """
-    from tokenizers import Tokenizer
-    from tokenizers.models import WordLevel
-    from tokenizers.pre_tokenizers import Whitespace
-    from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
+    @property
+    def device(self) -> torch.device:
+        return self._dummy.device
 
-    out_dir = cast(Path, tmp_path_factory.mktemp("tiny_local_gpt2"))
+    def eval(self) -> Self:
+        return self
 
-    vocab = {
-        "<pad>": 0,
-        "<unk>": 1,
-        "<bos>": 2,
-        "<eos>": 3,
-        "Hello": 4,
-        "world": 5,
-        "The": 6,
-        "capital": 7,
-        "of": 8,
-        "France": 9,
-        "is": 10,
-        "Test": 11,
-        "Prompt": 12,
-        "Model": 13,
-        "vs": 14,
-        "activation": 15,
-        "device": 16,
-    }
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        return_dict: bool = True,
+        **kwargs: object,
+    ) -> SimpleNamespace | torch.Tensor:
+        hidden = F.one_hot(
+            input_ids % self.hidden_dim, num_classes=self.hidden_dim
+        ).float()
+        for layer in self.model.layers:
+            hidden = layer(hidden)
+        logits = torch.zeros(
+            input_ids.shape[0],
+            input_ids.shape[1],
+            self.vocab_size,
+            dtype=hidden.dtype,
+            device=hidden.device,
+        )
+        if return_dict:
+            return SimpleNamespace(logits=logits)
+        return logits
 
-    tokenizer = cast(Any, Tokenizer)(WordLevel(vocab=vocab, unk_token="<unk>"))
-    tokenizer.pre_tokenizer = Whitespace()
-    hf_tokenizer = cast(Any, PreTrainedTokenizerFast)(
-        tokenizer_object=tokenizer,
-        unk_token="<unk>",
-        pad_token="<pad>",
-        bos_token="<bos>",
-        eos_token="<eos>",
+    def generate(self, input_ids: torch.Tensor, **kwargs: object) -> torch.Tensor:
+        _ = self.forward(input_ids, return_dict=True)
+        next_token = torch.full(
+            (input_ids.shape[0], 1), 7, dtype=input_ids.dtype, device=input_ids.device
+        )
+        return torch.cat([input_ids, next_token], dim=1)
+
+
+@pytest.fixture(scope="session")  # type: ignore[untyped-decorator]
+def sae_fixture() -> SparseAutoencoder:
+    """Reusable SAE fixture to avoid redundant model construction."""
+    return SparseAutoencoder(input_dim=896, latent_dim=3584)
+
+
+@pytest.fixture  # type: ignore[untyped-decorator]
+def mock_model_wrapper_24(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> ModelWrapper:
+    """Create a ModelWrapper wired to fake 24-layer model/tokenizer objects."""
+    model_dir = tmp_path / "fake-model"
+    model_dir.mkdir(parents=True, exist_ok=True)
+
+    fake_model = FakeCausalLM(layers=24, hidden_dim=896)
+    fake_tokenizer = FakeTokenizer()
+
+    monkeypatch.setattr(
+        "brain_surgery.model_wrapper.AutoModelForCausalLM.from_pretrained",
+        lambda *args, **kwargs: fake_model,
     )
-    hf_tokenizer.save_pretrained(out_dir)
-
-    config = cast(Any, GPT2Config)(
-        vocab_size=hf_tokenizer.vocab_size,
-        n_layer=2,
-        n_head=2,
-        n_embd=32,
-        bos_token_id=hf_tokenizer.bos_token_id,
-        eos_token_id=hf_tokenizer.eos_token_id,
-        pad_token_id=hf_tokenizer.pad_token_id,
+    monkeypatch.setattr(
+        "brain_surgery.model_wrapper.AutoTokenizer.from_pretrained",
+        lambda *args, **kwargs: fake_tokenizer,
     )
-    model = cast(Any, GPT2LMHeadModel)(config)
-    model.save_pretrained(out_dir)
 
-    return out_dir
+    return ModelWrapper(model_name=str(model_dir), layer_idx=None)
 
 
-@typed_fixture
-def tiny_model_wrapper(tiny_local_model_dir: Path) -> ModelWrapper:
-    """Fixture providing a ModelWrapper with a tiny test model.
-
-    Uses a tiny local GPT-2 style model saved to a temp directory, avoiding
-    network access and Hugging Face cache assumptions.
-
-    Returns:
-        ModelWrapper: An initialized ModelWrapper instance with the tiny model
-            and layer_idx=1 (valid for small models with ~3-4 layers).
-
-    Note:
-        This fixture is function-scoped (reset for each test) to ensure
-        test isolation and avoid state leakage between tests.
-    """
-    return ModelWrapper(model_name=str(tiny_local_model_dir), layer_idx=1)
-
-
-@typed_fixture(autouse=True)
+@pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
 def clear_gpu_cache() -> Generator[None, None, None]:
-    """Fixture to clear GPU cache after each test.
-
-    This is automatically used for all tests to prevent memory accumulation
-    across test runs, which is important when running many tests in sequence.
-
-    Yields:
-        None: Test execution happens here.
-
-    Note:
-        torch.cuda.empty_cache() is safe to call even if CUDA is not available.
-    """
+    """Clear CUDA allocator after each test to keep memory pressure low."""
     yield
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

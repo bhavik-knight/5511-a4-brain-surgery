@@ -1,0 +1,18 @@
+{
+  "run_id": "run_20260403_2258",
+  "dataset": "/home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/data/activations/soccer_activations_dataset.pt",
+  "checkpoint": "/home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2258/checkpoints/sae_best.pt",
+  "smoke_test": true,
+  "loss_history": [
+    {
+      "epoch": 0,
+      "loss": 10.825077533721924,
+      "reconstruction_loss": 10.824424743652344,
+      "l1_loss": 0.3265671581029892
+    }
+  ],
+  "epochs": 1,
+  "final_loss": 10.825077533721924,
+  "dead_neuron_fraction": 0.0,
+  "best_loss": 10.825077533721924
+}

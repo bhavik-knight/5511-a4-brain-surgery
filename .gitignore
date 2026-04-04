@@ -217,6 +217,32 @@ data/activations/*
 .cursorignore
 .cursorindexingignore
 
+# Secrets
+.env
+*.netrc
+
+# Experiment artifacts
+wandb/
+runs/
+logs/*
+!logs/.gitkeep
+
+# Large weight and tensor artifacts
+# NOTE: Git cannot enforce file-size-only rules; these extensions are commonly
+# used for >50MB artifacts in this project.
+*.pt
+*.bin
+
+# Result artifact policy: keep structured reports, ignore heavy tensors/checkpoints.
+results/**/*.pt
+results/**/*.bin
+!results/**/*.json
+!results/**/*.csv
+
+# Keep folder structure for generated data
+data/activations/*
+!data/activations/.gitkeep
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

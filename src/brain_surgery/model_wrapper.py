@@ -6,7 +6,7 @@ Activations are extracted from the residual stream of middle transformer layers,
 enabling mechanistic interpretability analysis via Sparse Autoencoders.
 
 Typical usage:
-    >>> wrapper = ModelWrapper(model_name="./models/qwen2.5-0.5b", layer_idx=4)
+    >>> wrapper = ModelWrapper(model_name="./models/qwen2.5-0.5b", layer_idx=12)
     >>> text, activations = wrapper.generate_with_activations(
     ...     prompt="The capital of France is",
     ...     max_tokens=20
@@ -15,12 +15,11 @@ Typical usage:
     >>> print(f"Activations shape: {activations.shape}")
 """
 
-from __future__ import annotations
-
 # ruff: noqa: ANN101
 
 from pathlib import Path
-from typing import Any, Literal, cast
+from collections.abc import Sequence
+from typing import Literal, cast
 
 import torch
 import torch.nn as nn
@@ -40,10 +39,31 @@ from .utils import (
     DEFAULT_LAYER_IDX,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
-    DEVICE,
     ROOT_DIR,
     ensure_dir_exists,
 )
+
+type ActivationPayloadValue = str | int | Tensor | list[str] | None
+
+
+def get_default_device() -> torch.device:
+    """Get appropriate device with priority: CUDA > CPU.
+
+    Detects the best available device for computation on the current system,
+    with fallback hierarchy: NVIDIA CUDA → CPU.
+
+    Returns:
+        Device object for torch operations (cuda or cpu).
+
+    Example:
+        >>> device = get_default_device()
+        >>> print(f"Using device: {device}")
+        Using device: cuda  # or cpu
+    """
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+
+    return torch.device("cpu")
 
 
 class ModelWrapper:
@@ -63,7 +83,7 @@ class ModelWrapper:
         hooks: List of registered hook handles for cleanup.
 
     Example:
-        >>> wrapper = ModelWrapper("./models/qwen2.5-0.5b", layer_idx=4)
+        >>> wrapper = ModelWrapper("./models/qwen2.5-0.5b", layer_idx=12)
         >>> text, acts = wrapper.generate_with_activations("Hello", max_tokens=10)
         >>> print(acts.shape)  # (seq_len, hidden_dim)
     """
@@ -71,7 +91,7 @@ class ModelWrapper:
     def __init__(
         self,
         model_name: str,
-        layer_idx: int,
+        layer_idx: int | None = None,
         *,
         activation_device: torch.device | Literal["cpu", "model"] = "cpu",
     ) -> None:
@@ -81,7 +101,9 @@ class ModelWrapper:
             model_name: Local directory containing a `transformers`-compatible
                 model + tokenizer (downloaded ahead of time into `./models/`).
             layer_idx: Index of the transformer layer to capture activations from.
-                For Qwen-2.5-0.5B (8 layers), recommended: 3-5 for middle layers.
+                If None, defaults to the midpoint layer after model load.
+                For Qwen-2.5-0.5B (24 layers), recommended: 12 for middle layer.
+                See get_recommended_layer_idx() for dynamic calculation.
             activation_device: Where to store captured activations.
                 - "cpu" (default): move activations off-GPU immediately.
                 - "model": keep activations on the same device as the model.
@@ -91,19 +113,16 @@ class ModelWrapper:
                 12GB) when collecting many prompts / long sequences.
 
         Raises:
-            ValueError: If layer_idx is negative.
+            ValueError: If layer_idx is negative or out of range.
             OSError: If model cannot be downloaded or loaded.
         """
-        if layer_idx < 0:
-            raise ValueError(f"layer_idx must be non-negative, got {layer_idx}")
-
         self.model_name: str = model_name
-        self.layer_idx: int = layer_idx
-        self.device: torch.device = DEVICE
+        self.layer_idx: int | None = layer_idx
+        self.device: torch.device = get_default_device()
 
         model_dir = Path(model_name)
         if not model_dir.is_absolute():
-            model_dir = (ROOT_DIR / model_dir).resolve()
+            model_dir = ROOT_DIR / model_dir
         if not model_dir.exists():
             raise FileNotFoundError(
                 "Local model directory not found: "
@@ -154,7 +173,81 @@ class ModelWrapper:
         self._last_token_strs: list[str] | None = None
 
         # Register hooks on the target layer
+        if self.layer_idx is None:
+            self.layer_idx = self.total_layers // 2
+            print(
+                "Defaulting to layer "
+                f"{self.layer_idx} (midpoint of {self.total_layers} layers)"
+            )
+
+        if self.layer_idx < 0:
+            raise ValueError(f"layer_idx must be non-negative, got {self.layer_idx}")
+        if self.layer_idx >= self.total_layers:
+            raise ValueError(
+                "layer_idx out of range: "
+                f"{self.layer_idx} >= total_layers ({self.total_layers})"
+            )
+
         self._register_hooks()
+
+    def is_loaded(self) -> bool:
+        """Check if model and tokenizer are initialized.
+
+        Returns:
+            True if both model and tokenizer are loaded, False otherwise.
+        """
+        return self.model is not None and self.tokenizer is not None
+
+    @property
+    def total_layers(self) -> int:
+        """Get the total number of transformer layers in the model.
+
+        Dynamically detects the layer count from the loaded model's config,
+        supporting multiple architecture types (Qwen, GPT, LLaMA, etc.).
+
+        Returns:
+            Total number of transformer blocks in the model.
+
+        Raises:
+            RuntimeError: If model is not loaded (call is_loaded() first).
+            RuntimeError: If unable to detect layer count from model config.
+
+        Example:
+            >>> wrapper = ModelWrapper(...)
+            >>> total = wrapper.total_layers
+            >>> print(f"Model has {total} layers")
+            Model has 24 layers
+        """
+        if not self.is_loaded():
+            raise RuntimeError("Model not loaded. Call load model first.")
+
+        # Try to get num_hidden_layers from config
+        if hasattr(self.model, "config") and hasattr(
+            self.model.config, "num_hidden_layers"
+        ):
+            num_hidden_layers = getattr(self.model.config, "num_hidden_layers")
+            if isinstance(num_hidden_layers, int):
+                return num_hidden_layers
+
+        raise RuntimeError("Could not detect total layer count from model config")
+
+    def _resolve_transformer_layers(self) -> Sequence[nn.Module]:
+        """Resolve transformer blocks across supported architecture layouts."""
+        model_root = getattr(self.model, "model", None)
+        if model_root is not None:
+            layers = getattr(model_root, "layers", None)
+            if isinstance(layers, nn.ModuleList):
+                return cast(Sequence[nn.Module], layers)
+
+        transformer_root = getattr(self.model, "transformer", None)
+        if transformer_root is not None:
+            layers = getattr(transformer_root, "h", None)
+            if isinstance(layers, nn.ModuleList):
+                return cast(Sequence[nn.Module], layers)
+
+        raise RuntimeError(
+            "Unsupported model architecture: cannot locate transformer layers"
+        )
 
     def _register_hooks(self) -> None:
         """Register forward hooks on the residual stream of the target layer.
@@ -177,22 +270,17 @@ class ModelWrapper:
         """
         # Access the model's transformer layers.
         # Different architectures expose layers under different attribute paths.
-        model_any: Any = self.model
-        if hasattr(model_any, "model") and hasattr(model_any.model, "layers"):
-            layers = model_any.model.layers
-        elif hasattr(model_any, "transformer") and hasattr(model_any.transformer, "h"):
-            layers = model_any.transformer.h
-        else:
+        layers = self._resolve_transformer_layers()
+        if self.layer_idx is None:
+            raise RuntimeError("layer_idx must be set before registering hooks")
+        layer_idx = self.layer_idx
+
+        if layer_idx >= len(layers):
             raise RuntimeError(
-                "Unsupported model architecture: cannot locate transformer layers"
+                f"layer_idx {layer_idx} exceeds number of layers ({len(layers)})"
             )
 
-        if self.layer_idx >= len(layers):  # pyright: ignore[reportArgumentType]
-            raise RuntimeError(
-                f"layer_idx {self.layer_idx} exceeds number of layers ({len(layers)})"  # pyright: ignore[reportArgumentType]
-            )
-
-        target_layer: nn.Module = cast(nn.Module, layers[self.layer_idx])
+        target_layer: nn.Module = cast(nn.Module, layers[layer_idx])
 
         # Hook function to capture activations
         def hook_fn(
@@ -323,8 +411,12 @@ class ModelWrapper:
         )
 
         # Generate tokens with activation capture
+        generate_fn = getattr(self.model, "generate", None)
+        if not callable(generate_fn):
+            raise RuntimeError("Loaded model does not expose a callable generate().")
+
         with torch.no_grad():
-            generate_out = cast(Any, self.model).generate(
+            generate_out = generate_fn(
                 input_ids,
                 attention_mask=attention_mask,
                 max_new_tokens=max_tokens,
@@ -340,7 +432,12 @@ class ModelWrapper:
             output_ids = generate_out
         else:
             # Some configs return a Generate*Output; sequences holds the token ids.
-            output_ids = cast(Tensor, generate_out.sequences)
+            sequences = getattr(generate_out, "sequences", None)
+            if not isinstance(sequences, torch.Tensor):
+                raise RuntimeError(
+                    "Model generate() output is missing tensor sequences"
+                )
+            output_ids = sequences
 
         # Combine activation steps into a single tensor
         if self._activation_steps:
@@ -485,7 +582,7 @@ class ModelWrapper:
             token_ids_1d = token_ids_1d[:seq_len]
             acts_2d = acts_2d[:seq_len]
 
-        payload: dict[str, Any] = {
+        payload: dict[str, ActivationPayloadValue] = {
             "model_name": self.model_name,
             "layer_idx": self.layer_idx,
             "device": str(self.device),
@@ -567,23 +664,23 @@ class ModelWrapper:
 
 
 # ============================================================================
-# LAYER SELECTION GUIDANCE FOR 0.5B PARAMETER MODELS
+# LAYER SELECTION GUIDANCE FOR TRANSFORMER MODELS
 # ============================================================================
-# For Qwen-2.5-0.5B and similar 0.5B models:
-#
-# Architecture: Typically 8 transformer layers with ~128 hidden dim
+# For Qwen-2.5-0.5B (24 transformer layers, 896 hidden dim):
 #
 # Layer Selection Recommendations:
-# - Layer 0-1: Early layers capture low-level syntax/tokens
-# - Layer 2-3: Early-middle layers (slightly entangled features)
-# - Layer 4-5: MIDDLE LAYERS (RECOMMENDED for SAEs) ← Best interpretability
+# - Layer 0-5: Early layers capture low-level syntax/tokens
+# - Layer 6-11: Early-middle layers (slightly entangled features)
+# - Layer 12-17: MIDDLE LAYERS (RECOMMENDED for SAEs) ← Best interpretability
 #   * Balance between early token-level and late semantic features
 #   * Sufficient abstraction while maintaining interpretability
 #   * Good feature separation for sparse decomposition
-# - Layer 6-7: Late layers capture high-level semantic/context
+#   * Dynamic calculation: use get_recommended_layer_idx(24) = 12
+# - Layer 18-23: Late layers capture high-level semantic/context
 #
-# Specific Recommendation: Use layer_idx=4 (5th layer, 0-indexed)
+# Specific Recommendation: Use layer_idx=12 (0-indexed)
 # This layer captures rich, interpretable features for mechanistic analysis.
+# Or use: layer_idx=get_recommended_layer_idx(model.config.num_hidden_layers)
 # ============================================================================
 
 
