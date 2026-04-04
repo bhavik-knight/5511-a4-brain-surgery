@@ -61,7 +61,9 @@ class ActivationWrapper(Protocol):
     def generate_with_activations(
         self,
         prompt: str,
-        **kwargs: object,
+        max_tokens: int = 50,
+        temperature: float = 0.7,
+        top_p: float = 0.95,
     ) -> tuple[str, dict[str, Tensor]]:
         """Generate text and return activation payloads."""
         ...
@@ -337,3 +339,25 @@ class DataGenerator:
         )
 
         return activation_matrix, metadata, summary
+
+
+if __name__ == "__main__":
+    from .model_wrapper import ModelWrapper
+    from .utils import DEFAULT_MODEL_NAME
+
+    print(f"Loading model: {DEFAULT_MODEL_NAME}...")
+    # Initialize wrapper (defaults to Layer 14 and BFloat16 on A100)
+    model_wrapper = ModelWrapper(model_name=DEFAULT_MODEL_NAME)
+
+    print("Capturing activations from prompt corpus...")
+    data_generator = DataGenerator(model_wrapper)
+
+    # Generate and save the consolidated dataset
+    _, _, dataset_summary = data_generator.generate_dataset()
+
+    expected_path = ACTIVATIONS_DIR / "soccer_activations_dataset.pt"
+    print(f"Step 1 Complete: Dataset saved to {expected_path}")
+    print(
+        f"Captured {dataset_summary.total_tokens} tokens across "
+        f"{dataset_summary.num_prompts} prompts."
+    )
