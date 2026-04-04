@@ -635,6 +635,8 @@ def run_dtype_audit(
     _print_header("Phase 3: Dtype Audit")
 
     allowed = {torch.float16, torch.bfloat16, torch.float32}
+    # Enforce strict consistency for 7B/A100 scale:
+    # Activations = bfloat16, SAE/Latents = float32
 
     model_param_dtype = next(model_wrapper.model.parameters()).dtype
     sae_weight_dtype: torch.dtype
@@ -675,8 +677,18 @@ def run_dtype_audit(
             print(f"  {name:28s}: <none>")
             continue
         ok = dtype in allowed
+        # Special consistency check for scaled 7B run
+        if name == "dataset.activation_matrix" and dtype != torch.bfloat16:
+            status = "WARN: EXPECT BF16"
+        elif (
+            name in ["sae.encoder_weight", "interpreter.latents"]
+            and dtype != torch.float32
+        ):
+            status = "WARN: EXPECT F32"
+        else:
+            status = "OK" if ok else "BAD"
+
         all_ok = all_ok and ok
-        status = "OK" if ok else "BAD"
         print(f"  {name:28s}: {str(dtype):12s} [{status}]")
 
     if not all_ok:
@@ -793,7 +805,11 @@ def main() -> None:
         global_census_csv_path=global_census_csv_path,
     )
 
-    model_wrapper = ModelWrapper(model_name=DEFAULT_MODEL_NAME, layer_idx=12)
+    from brain_surgery.utils import DEFAULT_LAYER_IDX
+
+    model_wrapper = ModelWrapper(
+        model_name=DEFAULT_MODEL_NAME, layer_idx=DEFAULT_LAYER_IDX
+    )
     _, _, _, intervention = run_phase_q6(
         interpreter,
         model_wrapper,
