@@ -205,12 +205,22 @@ def run_phase_q4_q5(
     if elbow_plot_path is not None:
         _save_elbow_plot(elbow_records, best_k, elbow_plot_path)
 
-    clustering = cluster_features_kmeans(
-        interpreter,
-        num_clusters=best_k,
-        random_state=42,
-        feature_profiles=feature_profiles,
-    )
+    try:
+        clustering = cluster_features_kmeans(
+            interpreter,
+            num_clusters=best_k,
+            random_state=42,
+            feature_profiles=feature_profiles,
+            backend="auto",
+            device=("cuda" if torch.cuda.is_available() else "cpu"),
+        )
+    except TypeError:
+        clustering = cluster_features_kmeans(
+            interpreter,
+            num_clusters=best_k,
+            random_state=42,
+            feature_profiles=feature_profiles,
+        )
     print(f"\nSpherical K-Means cluster summary ({best_k} clusters):")
     print(
         "  rep_feature = Centroid-Proximal Feature (closest feature to the "
