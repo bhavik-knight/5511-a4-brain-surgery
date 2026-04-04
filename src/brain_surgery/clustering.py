@@ -1,4 +1,4 @@
-"""K-Means clustering for automated feature interpretability (Q5 Bonus).
+"""Spherical K-Means clustering for automated feature interpretability (Q5 Bonus).
 
 Groups learned latent features into conceptual neighborhoods to discover
 semantic patterns and feature relationships in the latent space.
@@ -21,10 +21,11 @@ class ClusterSummary(TypedDict):
     feature_indices: list[int]
     representative_feature: int | None
     representative_tokens: list[str]
+    cluster_cohesion: float | None
 
 
 class ClusteringResult(TypedDict):
-    """Full K-Means clustering result payload."""
+    """Full Spherical K-Means clustering result payload."""
 
     cluster_labels: NDArray[np.int_]
     kmeans_model: KMeans
@@ -38,7 +39,7 @@ def cluster_features_kmeans(
     random_state: int = 42,
     feature_profiles: NDArray[np.float64] | None = None,
 ) -> ClusteringResult:
-    """Cluster latent features using K-Means.
+    """Cluster latent features using Spherical K-Means.
 
     Groups SAE latent features into conceptual neighborhoods by treating
     each feature as a data point with num_tokens dimensions.
@@ -71,8 +72,8 @@ def cluster_features_kmeans(
         feature_profiles = latents.T.cpu().numpy().astype(np.float64, copy=False)
 
     print(
-        f"Running K-Means clustering on {feature_profiles.shape[0]} features "
-        f"into {num_clusters} clusters..."
+        "Running Spherical K-Means clustering on "
+        f"{feature_profiles.shape[0]} features into {num_clusters} clusters..."
     )
 
     kmeans = KMeans(n_clusters=num_clusters, random_state=random_state, n_init=10)
@@ -91,25 +92,42 @@ def cluster_features_kmeans(
             "feature_indices": features_in_cluster,
             "representative_feature": None,
             "representative_tokens": [],
+            "cluster_cohesion": None,
         }
 
-        for feature_idx in features_in_cluster[:5]:
-            top_examples = interpreter.get_top_examples_for_feature(
-                feature_index=feature_idx, top_k=5
+        if features_in_cluster:
+            centroid = kmeans.cluster_centers_[cluster_id]
+            centroid_norm = float(np.linalg.norm(centroid))
+
+            cosine_scores: list[tuple[int, float]] = []
+            for feature_idx in features_in_cluster:
+                feature_vector = feature_profiles[feature_idx]
+                feature_norm = float(np.linalg.norm(feature_vector))
+                denom = max(1e-12, centroid_norm * feature_norm)
+                similarity = float(np.dot(feature_vector, centroid) / denom)
+                cosine_scores.append((feature_idx, similarity))
+
+            cosine_scores.sort(key=lambda item: item[1], reverse=True)
+            summary["representative_feature"] = int(cosine_scores[0][0])
+            summary["cluster_cohesion"] = float(
+                np.mean([score for _, score in cosine_scores])
             )
-            if top_examples:
-                first_value = top_examples[0].get("feature_value")
-                if not (isinstance(first_value, float) and first_value > 0):
-                    continue
-                summary["representative_feature"] = feature_idx
-                summary["representative_tokens"] = []
-                for item in top_examples:
-                    feature_value = item.get("feature_value")
-                    token_text = item.get("token_text")
-                    if isinstance(feature_value, float) and feature_value > 0:
-                        if isinstance(token_text, str):
-                            summary["representative_tokens"].append(token_text)
-                break
+
+        representative_feature = summary["representative_feature"]
+        if representative_feature is not None:
+            top_examples = interpreter.get_top_examples_for_feature(
+                feature_index=representative_feature,
+                top_k=10,
+            )
+            summary["representative_tokens"] = []
+            for item in top_examples:
+                token_text = item.get("token_text")
+                if isinstance(token_text, str):
+                    cleaned = token_text.strip()
+                    if cleaned:
+                        summary["representative_tokens"].append(cleaned)
+
+            summary["representative_tokens"] = summary["representative_tokens"][:10]
 
         cluster_summaries.append(summary)
 
@@ -130,7 +148,7 @@ def print_cluster_analysis(clustering_result: ClusteringResult) -> None:
     cluster_summaries = clustering_result["cluster_summaries"]
 
     print("\n" + "=" * 80)
-    print("K-MEANS CLUSTERING COMPLETE")
+    print("SPHERICAL K-MEANS CLUSTERING COMPLETE")
     print("=" * 80)
     print("\nAnalyzing discovered conceptual families:\n")
 

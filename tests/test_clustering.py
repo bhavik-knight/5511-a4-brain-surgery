@@ -39,6 +39,7 @@ def test_cluster_features_empty_latents_raises_value_error() -> None:
 
 def test_cluster_features_and_print_summary_happy_path(
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify clustering result structure and printable summary output."""
     latents = torch.randn(12, 20)
@@ -57,7 +58,7 @@ def test_cluster_features_and_print_summary_happy_path(
             for _ in range(top_k)
         ]
 
-    interpreter.get_top_examples_for_feature = _examples
+    monkeypatch.setattr(interpreter, "get_top_examples_for_feature", _examples)
 
     result = cluster_features_kmeans(
         interpreter=interpreter,
@@ -71,7 +72,7 @@ def test_cluster_features_and_print_summary_happy_path(
 
     print_cluster_analysis(result)
     output = capsys.readouterr().out
-    assert "K-MEANS CLUSTERING COMPLETE" in output
+    assert "SPHERICAL K-MEANS CLUSTERING COMPLETE" in output
     assert "CLUSTER 0" in output
 
 
