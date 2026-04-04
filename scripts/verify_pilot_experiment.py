@@ -67,7 +67,11 @@ def main() -> None:
     )
 
     model_wrapper = ModelWrapper(model_name=DEFAULT_MODEL_NAME, layer_idx=12)
-    _, _, _, intervention = run_phase_q6(interpreter, model_wrapper)
+    _, _, _, intervention = run_phase_q6(
+        interpreter,
+        model_wrapper,
+        checkpoint_path=checkpoint_path,
+    )
 
     run_dtype_audit(
         interpreter,

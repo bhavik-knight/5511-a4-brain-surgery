@@ -46,5 +46,7 @@ def test_main_module_runs_as_script(monkeypatch: pytest.MonkeyPatch) -> None:
 
     fake_mod.ModelWrapper = ScriptWrapper  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "brain_surgery.model_wrapper", fake_mod)
+    # Ensure runpy executes a fresh module instance and avoids import-state warning.
+    monkeypatch.delitem(sys.modules, "brain_surgery.main", raising=False)
 
     runpy.run_module("brain_surgery.main", run_name="__main__")

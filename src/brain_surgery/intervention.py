@@ -391,7 +391,8 @@ class SAEIntervention:
             ids = self.model_wrapper.tokenizer(token, add_special_tokens=False)[
                 "input_ids"
             ]
-            if len(ids) < 1:
+            # Next-token scoring only supports candidates that map to exactly one token.
+            if len(ids) != 1:
                 continue
             result[token] = float(log_probs[ids[0]].item())
 
