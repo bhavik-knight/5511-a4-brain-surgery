@@ -1,16 +1,45 @@
-# Q3 — Sparse Autoencoder (SAE) Training
+# Q3 - Sparse Autoencoder Training
 
-Implementation is in `src/brain_surgery/sae.py`.
+Implementation files:
 
-## Inputs
+- `src/brain_surgery/sae.py`
+- `src/brain_surgery/trainer.py`
+- `scripts/train_university.py`
 
-- **Training data:** activations saved under `data/activations/` (from Q2).
+## Theoretical Goal
 
-## Outputs (Repo Convention)
+Learn sparse latent features that reconstruct hidden activations while reducing
+feature superposition.
 
-- **Training curves / metrics:** `results/metrics/`
-- **Trained SAE checkpoints (if saved):** store under `results/` (e.g., `results/experiments/` or a dedicated subfolder if created later).
+Objective:
 
-______________________________________________________________________
+$$
+\\mathcal{L} = \\text{MSE}(x, \\hat{x}) + \\lambda |z|\_1
+$$
 
-This document can be expanded with architecture, loss terms, hyperparameters, and training procedure once Q3 is implemented.
+where reconstruction preserves information and $L_1$ regularization promotes
+feature selectivity.
+
+## Implementation
+
+- Trains SAE on activation matrices produced by the NDJSON-driven Q2 pipeline.
+- Uses run-scoped output directories (`results/experiments/<run_id>/...`) for
+  checkpoints, logs, and metrics.
+- Supports smart checkpointing:
+  - `sae_best.pt` for best validation trajectory.
+  - `sae_final.pt` and canonical checkpoint path for latest state.
+  - optional auto-resume behavior for long cluster jobs.
+- Supports `--smoke-test` in `train_university.py` to run a 1-epoch, 5-prompt
+  subset verification before full training.
+
+## Smart Checkpointing Rationale
+
+- Protects long-running university cluster jobs from interruption loss.
+- Enables deterministic downstream verification by pinning a run-specific best
+  checkpoint.
+- Makes Q4-Q6 reproducible by binding interpretation/intervention to a concrete
+  model artifact.
+
+## Current Status
+
+Q3 is complete and produces reproducible checkpoints compatible with Q4-Q6.

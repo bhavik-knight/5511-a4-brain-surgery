@@ -1,12 +1,29 @@
-# Q5 — Bonus: Feature Labeling
+# Q5 - Feature Labeling and Cluster Validation
 
-If implemented, document any automated labeling workflow and how it was evaluated.
+Primary implementation files:
 
-## Inputs
+- `src/brain_surgery/clustering.py`
+- `scripts/verify_pilot.py`
 
-- **Feature candidates / snippets:** typically sourced from `results/features/`
+## Theoretical Goal
 
-## Outputs (Repo Convention)
+Group latent features into semantic families and test whether those groups align
+with metadata categories instead of arbitrary geometric artifacts.
 
-- **Auto-label outputs / summaries:** `results/features/`
-- **Any scoring metrics / plots:** `results/metrics/`
+## Implementation
+
+- Applies Spherical K-Means by L2-normalizing feature vectors before clustering.
+- Uses a dynamic elbow heuristic (rate-of-change slowdown in SSE) to choose $k$.
+- Performs final K-Means assignment at selected $k$.
+- Computes category-purity statistics per cluster using metadata category votes.
+
+## Results
+
+- Produces `cluster_report.json` in each run directory with:
+  - selected cluster count,
+  - per-cluster dominant category,
+  - cluster purity,
+  - theme tags (`Tactical`, `Historical`, `Clubs`),
+  - cross-cluster theme summary.
+- This turns feature labeling from subjective inspection into a metadata-driven
+  validation protocol.
