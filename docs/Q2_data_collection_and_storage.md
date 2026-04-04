@@ -2,6 +2,23 @@
 
 Implementation file: `src/brain_surgery/data_gen.py`
 
+## Dataset Definition (Soccer Activations)
+
+The SAE dataset is derived from internal model activations, not raw text.
+
+- Corpus size: 170 curated soccer prompts.
+- Domain coverage: player biographies (Messi, Ronaldo), team tactics,
+  league history, and match rules.
+- Capture location: Layer 12 (0.5B) / 14 (7B) residual stream.
+- Storage tensor: $137557 \\times d\_{model}$ in
+  `data/activations/soccer_activations_dataset.pt`.
+
+### Layer Rationale
+
+Layer 12/14 is treated as a semantic sweet spot: syntax is already integrated,
+while token-level commitment is not yet fully finalized. This improves the
+quality of downstream feature interpretation and intervention studies.
+
 ## Theoretical Goal
 
 Create a trustworthy measurement dataset linking each token event to its hidden

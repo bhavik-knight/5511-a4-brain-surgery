@@ -2,6 +2,30 @@
 
 Implementation file: `src/brain_surgery/model_wrapper.py`
 
+## Qwen-2.5 Base Architecture (Pilot vs Golden)
+
+The project uses dense, decoder-only Qwen-2.5 checkpoints with grouped-query
+attention (GQA). Pilot experiments run on Qwen-2.5-0.5B, while high-fidelity
+analysis targets Qwen-2.5-7B.
+
+| Feature                   |   Qwen-2.5-0.5B (Pilots) | Qwen-2.5-7B (Golden Run) |
+| ------------------------- | -----------------------: | -----------------------: |
+| Architecture              | Decoder-only Transformer | Decoder-only Transformer |
+| Layers                    |                       24 |                       28 |
+| Hidden Dim ($d\_{model}$) |                      896 |                     3584 |
+| Attention Heads           |    14 Query / 2 KV (GQA) |    28 Query / 4 KV (GQA) |
+| Activation Function       |                   SwiGLU |                   SwiGLU |
+| Normalization             |                  RMSNorm |                  RMSNorm |
+| Positional Encoding       |                     RoPE |                     RoPE |
+
+### Why Both Models Matter
+
+- Qwen-2.5-0.5B is used for efficient hyperparameter calibration
+  (learning rate and $L_1$ sweeps).
+- Qwen-2.5-7B is the target model for high-fidelity feature extraction on A100.
+- Shared architectural motifs support methodological transfer from pilot runs
+  to large-scale runs.
+
 ## Theoretical Goal
 
 Expose internal transformer computations as analyzable signals by hooking the
