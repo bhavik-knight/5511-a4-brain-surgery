@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 import torch
 
 import brain_surgery.utils as utils
@@ -20,13 +21,13 @@ def test_get_recommended_layer_idx_midpoint() -> None:
     assert utils.get_recommended_layer_idx(24) == 12
 
 
-def test_get_device_name_cuda_branch(monkeypatch) -> None:
+def test_get_device_name_cuda_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify device-name helper handles CUDA-available branch."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
     assert utils.get_device_name() == "cuda"
 
 
-def test_get_device_cpu_branch(monkeypatch) -> None:
+def test_get_device_cpu_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify device helper returns CPU when CUDA is unavailable."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     assert utils.get_device().type == "cpu"

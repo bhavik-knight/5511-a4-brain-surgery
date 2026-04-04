@@ -20,10 +20,10 @@ from brain_surgery.sae import SparseAutoencoder
 class FakeTokenizer:
     """Minimal tokenizer stub for deterministic unit tests."""
 
-    pad_token_id = 0
-    eos_token_id = 1
-    pad_token = "<pad>"
-    eos_token = "<eos>"
+    pad_token_id: int | None = 0
+    eos_token_id: int | None = 1
+    pad_token: str | None = "<pad>"
+    eos_token: str | None = "<eos>"
 
     def __call__(
         self,
@@ -50,7 +50,9 @@ class FakeTokenizer:
         token = text.strip()
         return {"input_ids": [token_to_id.get(token, 99)]}
 
-    def decode(self, token_ids: object, skip_special_tokens: bool = True) -> str:
+    def decode(
+        self, token_ids: object, skip_special_tokens: bool = True
+    ) -> str | list[str]:
         _ = skip_special_tokens
         if isinstance(token_ids, torch.Tensor):
             token_ids = token_ids.tolist()
@@ -67,11 +69,11 @@ class FakeTokenizer:
 
         return " ".join(f"tok{tid}" for tid in normalized_ids)
 
-    def convert_ids_to_tokens(self, token_ids: list[int]) -> list[str]:
+    def convert_ids_to_tokens(self, token_ids: list[int]) -> list[str] | str:
         return [f"tok{tid}" for tid in token_ids]
 
 
-class FakeLayer(nn.Module):
+class FakeLayer(nn.Module):  # type: ignore[misc]
     """Simple layer that preserves hidden state shape."""
 
     def __init__(self, hidden_dim: int = 896) -> None:
@@ -82,7 +84,7 @@ class FakeLayer(nn.Module):
         return hidden_states + self.bias
 
 
-class FakeCausalLM(nn.Module):
+class FakeCausalLM(nn.Module):  # type: ignore[misc]
     """Tiny model stub exposing a 24-layer Qwen-like structure."""
 
     def __init__(
@@ -134,13 +136,13 @@ class FakeCausalLM(nn.Module):
         return torch.cat([input_ids, next_token], dim=1)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session")  # type: ignore[untyped-decorator]
 def sae_fixture() -> SparseAutoencoder:
     """Reusable SAE fixture to avoid redundant model construction."""
     return SparseAutoencoder(input_dim=896, latent_dim=3584)
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_model_wrapper_24(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -164,7 +166,7 @@ def mock_model_wrapper_24(
     return ModelWrapper(model_name=str(model_dir), layer_idx=None)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
 def clear_gpu_cache() -> Generator[None, None, None]:
     """Clear CUDA allocator after each test to keep memory pressure low."""
     yield

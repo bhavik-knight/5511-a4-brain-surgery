@@ -1,9 +1,11 @@
 """Orchestrate the golden activation dataset run."""
 
+from typing import cast
+
 import torch
 
 from brain_surgery.clustering import cluster_features_kmeans, print_cluster_analysis
-from brain_surgery.data_gen import DataGenerator
+from brain_surgery.data_gen import ActivationWrapper, DataGenerator
 from brain_surgery.interpret import SAEInterpreter
 from brain_surgery.intervention import SAEIntervention
 from brain_surgery.model_wrapper import ModelWrapper
@@ -21,7 +23,7 @@ from brain_surgery.utils import (
 def main() -> None:
     """Run the full activation capture + SAE pipeline."""
     wrapper = ModelWrapper(model_name=DEFAULT_MODEL_NAME)
-    generator = DataGenerator(wrapper)
+    generator = DataGenerator(cast(ActivationWrapper, wrapper))
 
     _, _, summary = generator.generate_dataset()
 

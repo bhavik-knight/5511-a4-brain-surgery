@@ -38,7 +38,7 @@ def test_interpreter_load_and_compute_latents(tmp_path: Path) -> None:
 
     _write_checkpoint(checkpoint, input_dim=896, latent_dim=64)
     acts = torch.randn(5, 896)
-    metadata = [
+    metadata: list[dict[str, int | float | str | None]] = [
         {
             "prompt_id": 0,
             "prompt_text": "p",
@@ -69,7 +69,7 @@ def test_feature_ranking_and_examples_are_structured(tmp_path: Path) -> None:
 
     _write_checkpoint(checkpoint, input_dim=896, latent_dim=32)
     acts = torch.randn(6, 896)
-    metadata = [
+    metadata: list[dict[str, int | float | str | None]] = [
         {
             "prompt_id": 0,
             "prompt_text": "who won",
@@ -136,7 +136,7 @@ def test_invalid_feature_and_row_indices_raise(tmp_path: Path) -> None:
     dataset = tmp_path / "dataset.pt"
     _write_checkpoint(checkpoint, input_dim=896, latent_dim=8)
     acts = torch.randn(3, 896)
-    metadata = [
+    metadata: list[dict[str, int | float | str | None]] = [
         {
             "prompt_id": 0,
             "prompt_text": "p",
@@ -168,7 +168,7 @@ def test_get_top_features_for_row_happy_path(tmp_path: Path) -> None:
     dataset = tmp_path / "dataset.pt"
     _write_checkpoint(checkpoint, input_dim=896, latent_dim=10)
     acts = torch.randn(4, 896)
-    metadata = [
+    metadata: list[dict[str, int | float | str | None]] = [
         {
             "prompt_id": 0,
             "prompt_text": "p",

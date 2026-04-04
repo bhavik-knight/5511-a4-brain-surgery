@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 from pathlib import Path
+from typing import cast
 
 import pytest
 import torch
@@ -9,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from brain_surgery.intervention import SAEIntervention
+from brain_surgery.model_wrapper import ModelWrapper
 from brain_surgery.sae import SparseAutoencoder
 
 
@@ -38,22 +40,24 @@ class FakeTokenizer:
             ids = ids.tolist()
         if isinstance(ids, list) and ids and isinstance(ids[0], list):
             ids = ids[0]
-        return " ".join(f"tok{i}" for i in ids)
+        if not isinstance(ids, list):
+            return ""
+        return " ".join(f"tok{int(i)}" for i in ids)
 
 
-class FakeBlock(nn.Module):
+class FakeBlock(nn.Module):  # type: ignore[misc]
     """Module used to exercise forward hooks."""
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return hidden_states
 
 
-class TupleBlock(nn.Module):
+class TupleBlock(nn.Module):  # type: ignore[misc]
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         return hidden_states, torch.zeros(1, dtype=hidden_states.dtype)
 
 
-class FakeModel(nn.Module):
+class FakeModel(nn.Module):  # type: ignore[misc]
     """Model stub exposing layers and logits for intervention tests."""
 
     def __init__(self) -> None:
@@ -135,7 +139,7 @@ class UnloadedWrapper(FakeWrapper):
 class NoLayerWrapper(FakeWrapper):
     def __init__(self) -> None:
         super().__init__()
-        self.model = SimpleNamespace()
+        self.model = SimpleNamespace()  # type: ignore[assignment]
 
 
 class TupleWrapper(FakeWrapper):
@@ -144,11 +148,15 @@ class TupleWrapper(FakeWrapper):
         self.model = TupleModel()
 
 
+def _as_model_wrapper(wrapper: FakeWrapper) -> ModelWrapper:
+    return cast(ModelWrapper, wrapper)
+
+
 def test_register_prompt_clamp_hook_modifies_and_preserves_fp16_dtype() -> None:
     """Verify clamping hook changes selected latent and outputs fp16 hidden states."""
     wrapper = FakeWrapper()
     sae = SparseAutoencoder(input_dim=896, latent_dim=3584)
-    intervention = SAEIntervention(model_wrapper=wrapper, sae=sae)
+    intervention = SAEIntervention(model_wrapper=_as_model_wrapper(wrapper), sae=sae)
 
     # Ensure feature max values exist for clamping.
     intervention.feature_max_values = torch.ones(sae.latent_dim)
@@ -178,7 +186,7 @@ def test_compare_next_token_logprobs_delta_is_sound(
     """Verify clamped-vs-baseline log-prob shift math is correct."""
     wrapper = FakeWrapper()
     sae = SparseAutoencoder(input_dim=896, latent_dim=3584)
-    intervention = SAEIntervention(model_wrapper=wrapper, sae=sae)
+    intervention = SAEIntervention(model_wrapper=_as_model_wrapper(wrapper), sae=sae)
     intervention.feature_max_values = torch.ones(sae.latent_dim)
 
     def fake_register(feature_index: int, clamp_multiplier: float) -> None:
@@ -224,7 +232,7 @@ def test_generate_with_clamped_feature_returns_typed_payload() -> None:
     """Verify generation API returns tensor-backed intervention payload."""
     wrapper = FakeWrapper()
     sae = SparseAutoencoder(input_dim=896, latent_dim=3584)
-    intervention = SAEIntervention(model_wrapper=wrapper, sae=sae)
+    intervention = SAEIntervention(model_wrapper=_as_model_wrapper(wrapper), sae=sae)
     intervention.feature_max_values = torch.ones(sae.latent_dim)
 
     result = intervention.generate_with_clamped_feature(
@@ -243,7 +251,7 @@ def test_register_prompt_clamp_hook_invalid_index_raises() -> None:
     """Verify feature index bounds check is enforced."""
     wrapper = FakeWrapper()
     sae = SparseAutoencoder(input_dim=896, latent_dim=3584)
-    intervention = SAEIntervention(model_wrapper=wrapper, sae=sae)
+    intervention = SAEIntervention(model_wrapper=_as_model_wrapper(wrapper), sae=sae)
     intervention.feature_max_values = torch.ones(sae.latent_dim)
 
     with pytest.raises(IndexError):
@@ -256,19 +264,26 @@ def test_register_prompt_clamp_hook_invalid_index_raises() -> None:
 def test_intervention_requires_loaded_wrapper() -> None:
     """Verify constructor rejects wrappers that are not loaded."""
     with pytest.raises(ValueError):
-        SAEIntervention(model_wrapper=UnloadedWrapper(), sae=SparseAutoencoder())
+        SAEIntervention(
+            model_wrapper=_as_model_wrapper(UnloadedWrapper()),
+            sae=SparseAutoencoder(),
+        )
 
 
 def test_intervention_requires_sae_or_checkpoint() -> None:
     """Verify constructor rejects missing SAE and checkpoint inputs."""
     with pytest.raises(ValueError):
-        SAEIntervention(model_wrapper=FakeWrapper(), sae=None, checkpoint_path=None)
+        SAEIntervention(
+            model_wrapper=_as_model_wrapper(FakeWrapper()),
+            sae=None,
+            checkpoint_path=None,
+        )
 
 
 def test_compare_logprobs_clamp_requires_feature_max_values() -> None:
     """Verify clamped scoring rejects missing feature max values."""
     intervention = SAEIntervention(
-        model_wrapper=FakeWrapper(),
+        model_wrapper=_as_model_wrapper(FakeWrapper()),
         sae=SparseAutoencoder(input_dim=896, latent_dim=3584),
     )
     with pytest.raises(RuntimeError):
@@ -287,7 +302,7 @@ def test_intervention_loads_sae_from_checkpoint(tmp_path: Path) -> None:
     torch.save(sae.state_dict_for_checkpoint(), checkpoint)
 
     intervention = SAEIntervention(
-        model_wrapper=FakeWrapper(),
+        model_wrapper=_as_model_wrapper(FakeWrapper()),
         checkpoint_path=checkpoint,
     )
     assert intervention.sae is not None
@@ -297,7 +312,7 @@ def test_intervention_loads_sae_from_checkpoint(tmp_path: Path) -> None:
 def test_load_sae_requires_checkpoint_path() -> None:
     """Verify explicit load_sae() validation when checkpoint path is absent."""
     intervention = SAEIntervention(
-        model_wrapper=FakeWrapper(),
+        model_wrapper=_as_model_wrapper(FakeWrapper()),
         sae=SparseAutoencoder(input_dim=896, latent_dim=3584),
     )
     intervention.checkpoint_path = None
@@ -308,7 +323,7 @@ def test_load_sae_requires_checkpoint_path() -> None:
 def test_get_transformer_blocks_raises_for_unsupported_model_shape() -> None:
     """Verify unsupported wrapped model shape raises clear runtime error."""
     intervention = SAEIntervention(
-        model_wrapper=NoLayerWrapper(),
+        model_wrapper=_as_model_wrapper(NoLayerWrapper()),
         sae=SparseAutoencoder(input_dim=896, latent_dim=64),
     )
     with pytest.raises(RuntimeError):
@@ -318,7 +333,7 @@ def test_get_transformer_blocks_raises_for_unsupported_model_shape() -> None:
 def test_generate_with_clamped_feature_raises_when_sae_missing() -> None:
     """Verify generation path rejects missing SAE state."""
     intervention = SAEIntervention(
-        model_wrapper=FakeWrapper(),
+        model_wrapper=_as_model_wrapper(FakeWrapper()),
         sae=SparseAutoencoder(input_dim=896, latent_dim=64),
     )
     intervention.sae = None
@@ -333,7 +348,7 @@ def test_generate_with_clamped_feature_raises_when_sae_missing() -> None:
 def test_compute_feature_max_values_requires_loaded_sae() -> None:
     """Verify compute_feature_max_values rejects missing SAE."""
     intervention = SAEIntervention(
-        model_wrapper=FakeWrapper(),
+        model_wrapper=_as_model_wrapper(FakeWrapper()),
         sae=SparseAutoencoder(input_dim=896, latent_dim=64),
     )
     intervention.sae = None
@@ -344,7 +359,7 @@ def test_compute_feature_max_values_requires_loaded_sae() -> None:
 def test_register_hook_requires_feature_max_values() -> None:
     """Verify hook registration requires precomputed feature max values."""
     intervention = SAEIntervention(
-        model_wrapper=FakeWrapper(),
+        model_wrapper=_as_model_wrapper(FakeWrapper()),
         sae=SparseAutoencoder(input_dim=896, latent_dim=64),
     )
     intervention.feature_max_values = None
@@ -355,7 +370,7 @@ def test_register_hook_requires_feature_max_values() -> None:
 def test_hook_tuple_output_branch_is_supported() -> None:
     """Verify hook handles tuple outputs and returns tuple branch safely."""
     intervention = SAEIntervention(
-        model_wrapper=TupleWrapper(),
+        model_wrapper=_as_model_wrapper(TupleWrapper()),
         sae=SparseAutoencoder(input_dim=896, latent_dim=64),
     )
     intervention.feature_max_values = torch.ones(64)
@@ -391,7 +406,7 @@ def test_compare_next_token_skips_multi_token_candidates(
     wrapper = FakeWrapper()
     wrapper.tokenizer = MultiTokenTokenizer()
     intervention = SAEIntervention(
-        model_wrapper=wrapper,
+        model_wrapper=_as_model_wrapper(wrapper),
         sae=SparseAutoencoder(input_dim=896, latent_dim=64),
     )
     scores = intervention.compare_next_token_logprobs("Q", ["Ronaldo", "goal"])

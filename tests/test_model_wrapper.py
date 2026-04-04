@@ -1,5 +1,6 @@
 """Unit tests for ModelWrapper layer/default-hook behavior and activations."""
 
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -112,7 +113,7 @@ def test_generate_with_non_callable_generate_raises(
             self.generate = None
             self._param = torch.nn.Parameter(torch.zeros(1))
 
-        def parameters(self):
+        def parameters(self) -> Iterator[torch.Tensor]:
             yield self._param
 
     monkeypatch.setattr(mock_model_wrapper_24, "model", NoGenerateModel())
@@ -134,7 +135,7 @@ def test_generate_with_output_missing_sequences_raises(
     class BadModel:
         device = torch.device("cpu")
 
-        def parameters(self):
+        def parameters(self) -> Iterator[torch.Tensor]:
             yield torch.zeros(1)
 
         def generate(self, *args: object, **kwargs: object) -> object:
@@ -249,7 +250,7 @@ def test_infer_model_input_device_fallbacks(
     class StrDeviceModel:
         device = "cpu"
 
-        def parameters(self):
+        def parameters(self) -> Iterator[torch.Tensor]:
             yield torch.nn.Parameter(torch.zeros(1))
 
     monkeypatch.setattr(mock_model_wrapper_24, "model", StrDeviceModel())
@@ -258,7 +259,7 @@ def test_infer_model_input_device_fallbacks(
     class EmptyParamsModel:
         device = None
 
-        def parameters(self):
+        def parameters(self) -> Iterator[torch.Tensor]:
             if False:
                 yield torch.nn.Parameter(torch.zeros(1))
             return
@@ -382,12 +383,14 @@ def test_generate_decode_list_and_token_str_single_string(
     """Verify defensive decode/list and convert_ids_to_tokens string branches."""
 
     class OddTokenizer(FakeTokenizer):
-        def decode(self, token_ids: object, skip_special_tokens: bool = True):
+        def decode(
+            self, token_ids: object, skip_special_tokens: bool = True
+        ) -> str | list[str]:
             _ = token_ids
             _ = skip_special_tokens
             return ["decoded-list"]
 
-        def convert_ids_to_tokens(self, token_ids: list[int]):
+        def convert_ids_to_tokens(self, token_ids: list[int]) -> str:
             _ = token_ids
             return "tok"
 
@@ -434,9 +437,11 @@ def test_register_hooks_layer_index_out_of_range_runtime() -> None:
     wrapper.hooks = []
     wrapper._activation_steps = []
     wrapper.activation_device = torch.device("cpu")
-    wrapper._resolve_transformer_layers = lambda: torch.nn.ModuleList(
-        [torch.nn.Identity()]
-    )  # type: ignore[assignment]
+    setattr(
+        wrapper,
+        "_resolve_transformer_layers",
+        lambda: torch.nn.ModuleList([torch.nn.Identity()]),
+    )
     with pytest.raises(RuntimeError):
         wrapper._register_hooks()
 
@@ -470,7 +475,7 @@ def test_generate_sequences_object_success_branch(
     class SeqModel:
         device = torch.device("cpu")
 
-        def parameters(self):
+        def parameters(self) -> Iterator[torch.Tensor]:
             yield torch.nn.Parameter(torch.zeros(1))
 
         def generate(self, *args: object, **kwargs: object) -> object:
