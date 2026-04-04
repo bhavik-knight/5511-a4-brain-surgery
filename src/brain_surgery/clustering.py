@@ -85,8 +85,16 @@ def _torch_spherical_kmeans(
 
     prev_labels: torch.Tensor | None = None
     n_iter = 0
+    chunk_size = 20000  # Similarity calculation in chunks for VRAM safety
+
     for step in range(max_iters):
-        sims = x @ centers.T
+        sims = torch.empty((n_points, num_clusters), device=features.device)
+
+        # Chunked similarity computation to prevent OOM
+        for i in range(0, n_points, chunk_size):
+            end_i = min(i + chunk_size, n_points)
+            sims[i:end_i] = x[i:end_i] @ centers.T
+
         labels = torch.argmax(sims, dim=1)
         if prev_labels is not None and torch.equal(labels, prev_labels):
             n_iter = step
@@ -96,6 +104,7 @@ def _torch_spherical_kmeans(
         for cluster_id in range(num_clusters):
             mask = labels == cluster_id
             if torch.any(mask):
+                # Using mean(dim=0) on masks of x - still efficient
                 new_centers[cluster_id] = x[mask].mean(dim=0)
             else:
                 ridx = torch.randint(0, n_points, (1,), generator=gen)

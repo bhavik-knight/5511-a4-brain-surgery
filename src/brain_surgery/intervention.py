@@ -202,13 +202,22 @@ class SAEIntervention:
             self.original_activations = hidden_states.detach().cpu()
 
             batch_size, seq_len, hidden_dim = hidden_states.shape
+            if hidden_dim != sae.input_dim:
+                raise RuntimeError(
+                    "Activation width and SAE input_dim mismatch: "
+                    f"hidden_dim={hidden_dim}, sae.input_dim={sae.input_dim}."
+                )
             flat_hidden = hidden_states.reshape(-1, hidden_dim)
 
             with torch.no_grad():
                 latent = sae.encode(flat_hidden)
                 max_val = feature_max_values[feature_index_local].item()
                 clamped_value = clamp_multiplier_local * max_val
-                latent[:, feature_index_local] = clamped_value
+                latent[:, feature_index_local] = torch.as_tensor(
+                    clamped_value,
+                    device=latent.device,
+                    dtype=latent.dtype,
+                )
                 modified_flat_hidden = sae.decode(latent)
 
             modified_hidden_states = modified_flat_hidden.reshape(

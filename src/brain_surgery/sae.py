@@ -18,12 +18,12 @@ class SAEConfig:
     """Configuration for Sparse Autoencoder architecture.
 
     Args:
-        input_dim: Dimension of activation vectors (default: 896 for Qwen-2.5-0.5B).
-        expansion_factor: Expansion factor for latent features (default: 4).
+        input_dim: Dimension of activation vectors (default: 3584 for Qwen-2.5-7B).
+        expansion_factor: Expansion factor for latent features (default: 32).
     """
 
-    input_dim: int = 896
-    expansion_factor: int = 4
+    input_dim: int = 3584
+    expansion_factor: int = 32
 
     @property
     def latent_dim(self) -> int:
@@ -42,8 +42,8 @@ class SAECheckpointPayload(TypedDict):
 class SparseAutoencoder(nn.Module):  # type: ignore[misc]
     """Sparse autoencoder for learning interpretable latent features.
 
-    Architecture (Optimized for Qwen-2.5-0.5B):
-            Input (896) → Encoder → Latent (3584) → Decoder → Reconstruction (896)
+        Architecture (Optimized for Qwen-2.5-7B):
+            Input (3584) → Encoder → Latent (114688) → Decoder → Reconstruction (3584)
 
     Features:
             - Tied weights: decoder weights = encoder weights transposed
@@ -51,14 +51,14 @@ class SparseAutoencoder(nn.Module):  # type: ignore[misc]
             - L1 penalty: encourages sparsity (most neurons inactive)
     """
 
-    def __init__(self, input_dim: int = 896, latent_dim: int = 3584) -> None:
+    def __init__(self, input_dim: int = 3584, latent_dim: int = 114688) -> None:
         """Initialize the sparse autoencoder.
 
         Args:
                 input_dim: Dimension of activation vectors from the LLM.
                 latent_dim: Dimension of the latent feature space. Should be
                         larger than input_dim for the SAE setting.
-                        For expansion factor 4, latent_dim = 896 * 4 = 3584.
+                        For expansion factor 32, latent_dim = 3584 * 32 = 114688.
         """
         super().__init__()
 

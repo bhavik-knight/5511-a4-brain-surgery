@@ -64,6 +64,9 @@ class SAEInterpreter:
 
         dataset = torch.load(self.dataset_path, map_location="cpu", weights_only=True)
         self.activation_matrix = dataset["activation_matrix"]
+
+        # Consistent with 7B model weights, activations can be bfloat16
+        # ensuring we don't accidentally cast to float32 too early if stored as bf16
         self.metadata = dataset["metadata"]
 
         if self.metadata is None or self.activation_matrix is None:
@@ -296,18 +299,45 @@ class SAEInterpreter:
             raise RuntimeError("Call compute_latents() before export_feature_census().")
 
         if soccer_keywords is None:
-            soccer_keywords = ["Messi", "Ronaldo", "goal", "pitch", "striker", "club"]
+            soccer_keywords = [
+                "Messi",
+                "Ronaldo",
+                "Lionel",
+                "goal",
+                "pitch",
+                "striker",
+                "club",
+                "possession",
+                "relegation",
+                "clean sheet",
+                "midfielder",
+                "goalkeeper",
+                "ball",
+            ]
 
         soccer_keywords_lower = [kw.lower() for kw in soccer_keywords]
 
         print(f"Calculating feature statistics for {self.latents.shape[1]} features...")
 
-        # Vectorized calculations for efficiency
-        max_vals, _ = torch.max(self.latents, dim=0)
-        avg_vals = torch.mean(self.latents, dim=0)
+        num_features = self.latents.shape[1]
+        max_vals = torch.zeros(num_features, device="cpu")
+        avg_vals = torch.zeros(num_features, device="cpu")
+        densities = torch.zeros(num_features, device="cpu")
 
-        # Count non-zero activations to calculate density
-        densities = (self.latents > 0).float().mean(dim=0)
+        chunk_size = 5000  # Process features in chunks to save Memory/VRAM
+
+        with torch.no_grad():
+            for i in range(0, num_features, chunk_size):
+                end_i = min(i + chunk_size, num_features)
+                # Slice latents - handling large tensors carefully
+                latent_chunk = self.latents[:, i:end_i]
+
+                max_vals[i:end_i], _ = torch.max(latent_chunk, dim=0)
+                avg_vals[i:end_i] = torch.mean(latent_chunk, dim=0)
+                densities[i:end_i] = (latent_chunk > 0).float().mean(dim=0)
+
+                if (i + chunk_size) % 20000 == 0 or end_i == num_features:
+                    print(f"  Stat calculation: {end_i}/{num_features} features...")
 
         # Filter by density
         sparse_mask = densities <= density_threshold
