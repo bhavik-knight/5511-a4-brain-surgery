@@ -38,7 +38,7 @@ This mixed-precision strategy preserves numerical robustness while enabling
 
 ### Training Outcome
 
-- Sparsity penalty: $L_1 = 0.001$.
+- Sparsity penalty: $L_1 = 0.01$.
 - Early stopping: triggered at Epoch 26.
 - Best checkpoint: Epoch 16.
 - Dead-neuron fraction: 0%.
@@ -120,4 +120,8 @@ ______________________________________________________________________
 ## Supporting Artifacts
 
 - Elbow plot: [results/metrics/elbow_plot.png](results/metrics/elbow_plot.png)
-- Global feature census snapshot: [results/features/run_20260404_1048/global_feature_census.csv](results/features/run_20260404_1048/global_feature_census_run_20260404_1048.csv)
+- Global feature census snapshot: [results/features/run_20260404_0547/global_feature_census.csv](results/features/run_20260404_0547/global_feature_census.csv)
+
+Note: run_20260404_1048 conclusions in this report follow the final structured
+result summary. The local workspace currently exposes the latest census artifact
+under run_20260404_0547.

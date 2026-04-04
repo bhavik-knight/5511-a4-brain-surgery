@@ -9,7 +9,7 @@ The SAE dataset is derived from internal model activations, not raw text.
 - Corpus size: 170 curated soccer prompts.
 - Domain coverage: player biographies (Messi, Ronaldo), team tactics,
   league history, and match rules.
-- Capture location: Layer 12 (0.5B Model) / 14 (7B Model) residual stream.
+- Capture location: Layer 12 (0.5B) / 14 (7B) residual stream.
 - Storage tensor: $137557 \\times d\_{model}$ in
   `data/activations/soccer_activations_dataset.pt`.
 
