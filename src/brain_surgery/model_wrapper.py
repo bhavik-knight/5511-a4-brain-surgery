@@ -25,25 +25,15 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-# MOCK: Prevent 'torchvision::nms does not exist' error during transformers import.
-# This occurs due to binary mismatch between torch and torchvision on some systems.
-# Since this project is purely text-based, we can safely mock it.
-import sys
-from unittest.mock import MagicMock
-
-sys.modules["torchvision"] = MagicMock()
-sys.modules["torchvision.ops"] = MagicMock()
-sys.modules["torchvision.transforms"] = MagicMock()
-
-from transformers import (  # noqa: E402
+from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     PreTrainedModel,
     PreTrainedTokenizer,
 )
-from transformers.tokenization_utils_base import BatchEncoding  # noqa: E402
+from transformers.tokenization_utils_base import BatchEncoding
 
-from .utils import (  # noqa: E402
+from .utils import (
     ACTIVATIONS_DIR,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL_NAME,

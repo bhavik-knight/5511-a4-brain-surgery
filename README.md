@@ -39,10 +39,10 @@ pre-commit install
 uv run pytest tests/
 ```
 
-Model weights (offline local directory expected at `models/qwen2.5-7b`):
+Model weights (offline local directory expected at `models/qwen2.5-0.5b`):
 
 ```bash
-uv run hf download Qwen/Qwen2.5-7B --local-dir ./models/qwen2.5-7b
+uv run hf download Qwen/Qwen2.5-0.5B --local-dir ./models/qwen2.5-0.5b
 ```
 
 Use this streamlined workflow to capture activations and train the SAE:
