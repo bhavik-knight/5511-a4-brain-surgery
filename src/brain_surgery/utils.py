@@ -177,8 +177,12 @@ def get_recommended_layer_idx(num_layers: int) -> int:
 # Default model for Q1 (local directory; downloaded once, then used offline)
 DEFAULT_MODEL_NAME: str = str(MODELS_DIR / "qwen2.5-0.5b")
 
-# Default layer index for Qwen2.5-0.5B
-DEFAULT_LAYER_IDX: int = 12
+# Default layer indices used when ModelWrapper.layer_idx is not provided.
+# - DEFAULT_LAYER_IDX: tuned for A100/Qwen-2.5-7B runs used in the assignment tooling.
+# - DEFAULT_LAYER_IDX_QWEN_0_5B: sensible midpoint default for the local
+#   Qwen-2.5-0.5B model.
+DEFAULT_LAYER_IDX: int = 14
+DEFAULT_LAYER_IDX_QWEN_0_5B: int = 12
 
 # Default generation parameters
 DEFAULT_MAX_TOKENS: int = 50

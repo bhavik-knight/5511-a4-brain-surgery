@@ -38,6 +38,7 @@ from .utils import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL_NAME,
     DEFAULT_LAYER_IDX,
+    DEFAULT_LAYER_IDX_QWEN_0_5B,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     ROOT_DIR,
@@ -175,10 +176,22 @@ class ModelWrapper:
 
         # Register hooks on the target layer
         if self.layer_idx is None:
-            self.layer_idx = DEFAULT_LAYER_IDX
-            print(
-                f"Defaulting to layer {self.layer_idx} (optimized for A100/Qwen-2.5-7B)"
-            )
+            model_path_lower = str(model_dir).lower()
+            if (
+                "qwen2.5-0.5b" in model_path_lower
+                or "qwen-2.5-0.5b" in model_path_lower
+            ):
+                self.layer_idx = DEFAULT_LAYER_IDX_QWEN_0_5B
+                print(
+                    f"Defaulting to layer {self.layer_idx} "
+                    "(mid-layer for Qwen-2.5-0.5B)"
+                )
+            else:
+                self.layer_idx = DEFAULT_LAYER_IDX
+                print(
+                    f"Defaulting to layer {self.layer_idx} "
+                    "(optimized for A100/Qwen-2.5-7B)"
+                )
 
         if self.layer_idx < 0:
             raise ValueError(f"layer_idx must be non-negative, got {self.layer_idx}")
