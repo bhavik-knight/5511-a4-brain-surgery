@@ -625,7 +625,7 @@ def run_dtype_audit(
     """Print dtype audit and confirm rich metadata report export."""
     _print_header("Phase 3: Dtype Audit")
 
-    allowed = {torch.float16, torch.float32}
+    allowed = {torch.float16, torch.bfloat16, torch.float32}
 
     model_param_dtype = next(model_wrapper.model.parameters()).dtype
     sae_weight_dtype: torch.dtype
@@ -671,7 +671,9 @@ def run_dtype_audit(
         print(f"  {name:28s}: {str(dtype):12s} [{status}]")
 
     if not all_ok:
-        raise RuntimeError("Dtype audit failed: found non-float16/float32 tensors.")
+        raise RuntimeError(
+            "Dtype audit failed: found tensors outside float16/bfloat16/float32."
+        )
 
     metadata_ok = _save_metadata_report(interpreter, metadata_json_path)
     if not metadata_ok:
@@ -680,7 +682,9 @@ def run_dtype_audit(
             "are missing. Continuing for smoke-test compatibility."
         )
 
-    print("\nDtype audit passed: all checked tensors are float16 or float32.")
+    print(
+        "\nDtype audit passed: all checked tensors are float16, bfloat16, or float32."
+    )
 
 
 def _save_metadata_report(interpreter: SAEInterpreter, out_path: Path) -> bool:
