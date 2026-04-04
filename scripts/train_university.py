@@ -16,6 +16,8 @@ from brain_surgery.utils import ACTIVATIONS_DIR, create_run_output_dirs, generat
 
 load_dotenv()
 
+DEFAULT_EXPANSION_FACTOR = 4
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for headless training.
@@ -160,6 +162,14 @@ def main() -> None:
     try:
         payload = torch.load(args.dataset, map_location="cpu", weights_only=True)
         activation_matrix = payload["activation_matrix"]
+        if not isinstance(activation_matrix, torch.Tensor):
+            raise ValueError("Dataset payload missing activation_matrix tensor.")
+        if activation_matrix.ndim != 2:
+            raise ValueError(
+                "activation_matrix must be 2D with shape "
+                "(num_tokens, hidden_dim), got "
+                f"{tuple(activation_matrix.shape)}"
+            )
         run_epochs = args.epochs
 
         if args.smoke_test:
@@ -170,7 +180,15 @@ def main() -> None:
                 f"{activation_matrix.shape[0]} token rows (from first 5 prompts)."
             )
 
-        model = SparseAutoencoder()
+        input_dim = int(activation_matrix.shape[1])
+        latent_dim = input_dim * DEFAULT_EXPANSION_FACTOR
+        print(
+            "SAE architecture: "
+            f"input_dim={input_dim}, latent_dim={latent_dim}, "
+            f"expansion_factor={DEFAULT_EXPANSION_FACTOR}"
+        )
+
+        model = SparseAutoencoder(input_dim=input_dim, latent_dim=latent_dim)
         trainer = SAETrainer(
             model=model,
             learning_rate=args.lr,
