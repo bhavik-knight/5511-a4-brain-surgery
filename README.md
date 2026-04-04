@@ -36,70 +36,40 @@ Setup:
 
 ```bash
 uv sync
+```
+
+- Activate the environment (for mac/linux)
+
+```bash
+source .venv/bin/activate
+```
+
+or (for windows)
+
+```
+.venv/Scripts/activate
+```
+
+```bash
 pre-commit install
 uv run pytest tests/
 ```
 
-Model weights (offline local directory expected at `models/qwen2.5-0.5b`):
+Model weights (offline local directory expected at `models/qwen2.5-7b`):
 
 ```bash
-uv run hf download Qwen/Qwen2.5-0.5B --local-dir ./models/qwen2.5-0.5b
-```
-
-Use this streamlined workflow to capture activations and train the SAE:
-
-```bash
-# Step 1: Capture residual-stream activations (saved to data/activations/)
-uv run python -m brain_surgery.data_gen
-
-# Step 2: Train SAE on captured activations
-uv run python scripts/train_university.py --run-id run_YYYYMMDD_HHMM
+uv run hf download Qwen/Qwen2.5-7B --local-dir ./models/qwen2.5-7b
 ```
 
 ## Usage Guide
 
-The standard research workflow is a two-step pipeline.
+**Pre-requisite:**
 
-### Step 1: Data Capture (Residual Stream Extraction)
+- Ensure the local data directory exists.
 
-Before training, you must extract activation tensors from the LLM. This module runs the prompt corpus through the model hooks and saves a consolidated dataset.
+- Before training, you must extract activation tensors from the LLM. This module runs the prompt corpus through the model hooks and saves a consolidated dataset.
 
-**Pre-requisite:** Ensure the local data directory exists:
 `mkdir -p data/activations/`
-
-```bash
-uv run python -m brain_surgery.data_gen
-```
-
-- **Security Note:** All internal loading (including `torch.load` calls for datasets and checkpoints) uses `weights_only=True` to prevent arbitrary code execution from untrusted pickles.
-
-### Step 2: SAE Training
-
-Train the Sparse Autoencoder on the captured activation matrix.
-
-```bash
-# Full training run
-uv run python scripts/train_university.py --run-id run_YYYYMMDD_HHMM
-
-# Or run a quick smoke test (1 epoch on 5-prompt subset)
-uv run python scripts/train_university.py --smoke-test --run-id run_YYYYMMDD_HHMM
-```
-
-For full training, tune training flags (e.g., `--l1`, `--epochs`) as needed.
-
-### Step 3: Verification and Reporting
-
-Verify pilot results (Q4-Q6) and generate an executive summary.
-
-```bash
-# Verify clusters, purity, and interventions
-uv run python scripts/verify_pilot.py --run-id run_YYYYMMDD_HHMM
-
-# Generate executive summary report (JSON)
-uv run python scripts/generate_report.py --run-id run_YYYYMMDD_HHMM
-```
-
-Checkpoint resolution follows the experiment hierarchy: `results/experiments/<run_id>/checkpoints/sae_best.pt`.
 
 ## Reproducing the Results (7B)
 
@@ -124,27 +94,32 @@ uv run python -m brain_surgery.data_gen
 Train for 100 epochs with L1 penalty 0.001.
 
 ```bash
-uv run python scripts/train_university.py \
-  --epochs 100 \
-  --l1 0.001 \
-  --run-id run_20260404_1048
+uv run python scripts/train_university.py --epoch <num_epoches> --l1 <lambda_panelty> --wandb-run-name <wandb-ai-run-name-for-traceability>
 ```
 
-This training run was tracked in WandB as: `smu-e100-l1-0.001`.
+### 4. Verification and Reporting
+
+Verify pilot results (Q4-Q6) and generate an executive summary.
 
 ```bash
-uv run scripts/train_university.py --epochs 100 --l1 0.001 --wandb-run-name "smu-e100-l1-0.001"
+# Verify clusters, purity, and interventions
+uv run scripts/verify_pilot.py \
+  --run-id <run_id> \
+  --checkpoint results/experiments/<run_id>/checkpoints/sae_best.pt \
+  --dataset data/activations/soccer_activations_dataset.pt
 ```
 
-### 4. Report Generation
+### 5. Report Generation
 
 Synthesize interpretability findings from the final run ID.
 
 ```bash
-uv run python scripts/generate_report.py --run-id run_20260404_1048
+uv run python scripts/generate_report.py --run-id <run_id>
 ```
 
-### Project Structure Note
+Checkpoint resolution follows the experiment hierarchy: `results/experiments/<run_id>/checkpoints/sae_best.pt`.
+
+### 6. Project Structure Note
 
 - Run-scoped outputs are stored under `results/experiments/`.
 - For the 7B workflow, the SAE uses a 32x expansion factor:
