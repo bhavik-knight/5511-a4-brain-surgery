@@ -7,15 +7,15 @@ Run with:
 import argparse
 import csv
 import json
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
 
 import numpy as np
 import torch
-from sklearn.cluster import DBSCAN, KMeans
-from sklearn.neighbors import NearestNeighbors
+import torch.nn.functional
+from sklearn.cluster import KMeans
 
-from brain_surgery.clustering import cluster_features_kmeans
+from brain_surgery.clustering import ClusteringResult, cluster_features_kmeans
 from brain_surgery.interpret import SAEInterpreter
 from brain_surgery.intervention import SAEIntervention
 from brain_surgery.model_wrapper import ModelWrapper
@@ -138,7 +138,7 @@ def run_phase_q4_q5(
     elbow_max_k: int = DEFAULT_ELBOW_MAX_K,
     top_features_csv_path: Path | None = None,
     elbow_json_path: Path | None = None,
-    dbscan_json_path: Path | None = None,
+    cluster_report_json_path: Path | None = None,
 ) -> None:
     """Run feature interpretation and clustering summary for Q4/Q5."""
     _print_header("Phase 1: Q4/Q5 Interpretability Check")
@@ -185,7 +185,14 @@ def run_phase_q4_q5(
     if interpreter.latents is None:
         raise RuntimeError("Interpreter latents missing. Call compute_latents() first.")
 
-    feature_profiles = interpreter.latents.T.cpu().numpy()
+    features = interpreter.latents.T
+    print(
+        "\nNormalizing features for Spherical K-Means to mitigate the curse "
+        "of dimensionality."
+    )
+    features = torch.nn.functional.normalize(features, p=2, dim=1)
+    feature_profiles = features.cpu().numpy().astype(np.float64, copy=False)
+
     best_k, elbow_records = _print_elbow_table(
         feature_profiles,
         start_k=elbow_start_k,
@@ -195,14 +202,11 @@ def run_phase_q4_q5(
     if elbow_json_path is not None:
         _save_elbow_sweep_json(elbow_records, elbow_json_path)
 
-    dbscan_summary = _print_dbscan_summary(interpreter, feature_profiles, best_k)
-    if dbscan_json_path is not None:
-        _save_dbscan_summary_json(dbscan_summary, dbscan_json_path)
-
     clustering = cluster_features_kmeans(
         interpreter,
         num_clusters=best_k,
         random_state=42,
+        feature_profiles=feature_profiles,
     )
     print(f"\nK-Means cluster summary ({best_k} clusters):")
     for summary in clustering["cluster_summaries"]:
@@ -213,6 +217,14 @@ def run_phase_q4_q5(
         print(
             f"  Cluster {cluster_id:2d} | size={num_features:4d} | "
             f"rep_feature={representative} | tokens={top_tokens}"
+        )
+
+    if cluster_report_json_path is not None:
+        _save_cluster_report(
+            interpreter=interpreter,
+            clustering=clustering,
+            json_path=cluster_report_json_path,
+            selected_k=best_k,
         )
 
 
@@ -252,23 +264,49 @@ def _print_elbow_table(
         )
         print(f"  {k:3d} | {inertia:14.4f}")
 
-    # Elbow heuristic: pick the point with max perpendicular distance to
-    # the line connecting first and last SSE points.
-    x = np.asarray(k_values, dtype=np.float64)
-    y = np.asarray(inertias, dtype=np.float64)
-    x1, y1 = x[0], y[0]
-    x2, y2 = x[-1], y[-1]
-    denominator = np.hypot(y2 - y1, x2 - x1)
-    if denominator == 0:
-        best_k = k_values[0]
-    else:
-        distances = np.abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
-        distances = distances / denominator
-        best_idx = int(np.argmax(distances))
-        best_k = int(k_values[best_idx])
+    best_k = _pick_dynamic_elbow_k(k_values=k_values, inertias=inertias)
 
     print(f"\nEstimated elbow k: {best_k}")
     return best_k, elbow_records
+
+
+def _pick_dynamic_elbow_k(k_values: list[int], inertias: list[float]) -> int:
+    """Pick k where SSE improvement rate slows down significantly.
+
+    Uses the discrete rate of change of SSE improvements and chooses the first
+    k whose slowdown exceeds a dynamic threshold derived from the observed sweep.
+    """
+    if not k_values:
+        raise ValueError("k_values cannot be empty")
+    if len(k_values) != len(inertias):
+        raise ValueError("k_values and inertias must have the same length")
+    if len(k_values) <= 2:
+        return int(k_values[0])
+
+    sse = np.asarray(inertias, dtype=np.float64)
+    improvements = sse[:-1] - sse[1:]
+    improvements = np.clip(improvements, a_min=0.0, a_max=None)
+
+    if len(improvements) <= 1 or float(np.sum(improvements)) == 0.0:
+        return int(k_values[0])
+
+    eps = 1e-12
+    improvement_ratios = improvements[1:] / np.maximum(improvements[:-1], eps)
+    slowdown = 1.0 - improvement_ratios
+
+    mean_slowdown = float(np.mean(slowdown))
+    std_slowdown = float(np.std(slowdown))
+    dynamic_threshold = max(0.25, mean_slowdown + 0.5 * std_slowdown)
+
+    elbow_index = 0
+    for idx, slowdown_value in enumerate(slowdown):
+        if float(slowdown_value) >= dynamic_threshold:
+            elbow_index = idx + 1
+            break
+    else:
+        elbow_index = int(np.argmax(slowdown)) + 1
+
+    return int(k_values[elbow_index])
 
 
 def _save_top_features_csv(rows: list[dict[str, object]], csv_path: Path) -> None:
@@ -291,90 +329,128 @@ def _save_elbow_sweep_json(records: list[dict[str, object]], json_path: Path) ->
     print(f"Saved elbow sweep JSON: {json_path}")
 
 
-def _print_dbscan_summary(
+def _normalize_cluster_theme(category: str) -> str:
+    lowered = category.casefold()
+    if "club" in lowered or "team" in lowered:
+        return "Clubs"
+    if "history" in lowered or "historical" in lowered or "era" in lowered:
+        return "Historical"
+    return "Tactical"
+
+
+def _feature_category_purity(
     interpreter: SAEInterpreter,
-    feature_profiles: np.ndarray,
-    elbow_k: int,
-) -> dict[str, object]:
-    """Run DBSCAN, tuned from elbow_k, and print top-cluster token summaries."""
-    print("\nDBSCAN secondary pass:")
+    *,
+    feature_index: int,
+    top_k_rows: int = 25,
+) -> tuple[str, float, dict[str, int]]:
+    if interpreter.latents is None or interpreter.metadata is None:
+        raise RuntimeError("Interpreter latents/metadata missing for category purity.")
 
-    n_samples = feature_profiles.shape[0]
-    if n_samples < 2:
-        print("  Not enough features to run DBSCAN.")
-        return {
-            "elbow_k": elbow_k,
-            "eps": None,
-            "clusters_found": 0,
-            "noise_features": 0,
-            "top_clusters": [],
-        }
+    feature_values = interpreter.latents[:, feature_index]
+    top_k = min(top_k_rows, feature_values.shape[0])
+    top_indices = torch.topk(feature_values, k=top_k).indices.tolist()
 
-    n_neighbors = max(2, min(elbow_k, n_samples - 1))
-    neighbors = NearestNeighbors(n_neighbors=n_neighbors)
-    neighbors.fit(feature_profiles)
-    distances, _ = neighbors.kneighbors(feature_profiles)
-    eps = float(np.percentile(distances[:, -1], 90))
+    category_counter: Counter[str] = Counter()
+    for row_index in top_indices:
+        category = interpreter.metadata[row_index].get("category")
+        if isinstance(category, str):
+            cleaned = category.strip()
+            if cleaned:
+                category_counter[cleaned] += 1
 
-    dbscan = DBSCAN(eps=eps, min_samples=5)
-    labels = dbscan.fit_predict(feature_profiles)
+    if not category_counter:
+        return "unknown", 0.0, {}
 
-    noise_count = int(np.sum(labels == -1))
-    unique_labels = sorted(int(label) for label in np.unique(labels) if label != -1)
-    print(
-        "  "
-        f"clusters_found={len(unique_labels)} | "
-        f"noise_features={noise_count} | "
-        f"eps={eps:.6f} | tuned_from_elbow_k={elbow_k}"
-    )
-    top_clusters: list[dict[str, object]] = []
-    if unique_labels:
-        cluster_sizes = [
-            (label, int(np.sum(labels == label))) for label in unique_labels
-        ]
-        cluster_sizes.sort(key=lambda item: item[1], reverse=True)
+    dominant_category, dominant_count = category_counter.most_common(1)[0]
+    total = int(sum(category_counter.values()))
+    purity = float(dominant_count / total) if total > 0 else 0.0
+    return dominant_category, purity, dict(category_counter)
 
-        print("\n  Top 10 DBSCAN clusters with 10 representative tokens:")
-        print("  cluster | size | tokens")
-        print("  --------+------+-----------------------------------------------")
-        for label, size in cluster_sizes[:10]:
-            feature_indices = np.where(labels == label)[0].tolist()
-            token_counter: Counter[str] = Counter()
-            for feature_index in feature_indices:
-                examples = interpreter.get_top_examples_for_feature(
-                    feature_index=feature_index,
-                    top_k=10,
-                )
-                for item in examples:
-                    token_text = _safe_token_text(item.get("token_text")).strip()
-                    if token_text:
-                        token_counter[token_text] += 1
-            top_tokens = [token for token, _ in token_counter.most_common(10)]
-            top_clusters.append(
-                {
-                    "cluster_id": int(label),
-                    "size": int(size),
-                    "top_tokens": top_tokens,
-                }
+
+def _save_cluster_report(
+    *,
+    interpreter: SAEInterpreter,
+    clustering: ClusteringResult,
+    json_path: Path,
+    selected_k: int,
+) -> None:
+    cluster_summaries = clustering.get("cluster_summaries", [])
+    if not isinstance(cluster_summaries, list):
+        raise RuntimeError("cluster_summaries missing from clustering payload")
+
+    report_clusters: list[dict[str, object]] = []
+    for summary in cluster_summaries:
+        if not isinstance(summary, dict):
+            continue
+        cluster_id = summary.get("cluster_id")
+        feature_indices = summary.get("feature_indices")
+        if not isinstance(cluster_id, int) or not isinstance(feature_indices, list):
+            continue
+
+        per_feature_category: Counter[str] = Counter()
+        per_feature_purity: list[float] = []
+        for feature_index in feature_indices:
+            if not isinstance(feature_index, int):
+                continue
+            dominant_category, purity, _ = _feature_category_purity(
+                interpreter,
+                feature_index=feature_index,
             )
-            print(f"  {label:7d} | {size:4d} | {' | '.join(top_tokens)}")
-    else:
-        print("  No dense DBSCAN clusters found with current hyperparameters.")
+            per_feature_category[dominant_category] += 1
+            per_feature_purity.append(purity)
 
-    return {
-        "elbow_k": int(elbow_k),
-        "eps": float(eps),
-        "clusters_found": int(len(unique_labels)),
-        "noise_features": int(noise_count),
-        "top_clusters": top_clusters,
+        cluster_size = len(feature_indices)
+        dominant_cluster_category = "unknown"
+        category_purity = 0.0
+        if per_feature_category and cluster_size > 0:
+            dominant_cluster_category, dominant_count = (
+                per_feature_category.most_common(1)[0]
+            )
+            category_purity = float(dominant_count / cluster_size)
+
+        average_feature_purity = (
+            float(np.mean(per_feature_purity)) if per_feature_purity else 0.0
+        )
+        theme = _normalize_cluster_theme(dominant_cluster_category)
+        report_clusters.append(
+            {
+                "cluster_id": cluster_id,
+                "cluster_size": cluster_size,
+                "dominant_category": dominant_cluster_category,
+                "cluster_theme": theme,
+                "category_purity": category_purity,
+                "average_feature_purity": average_feature_purity,
+                "category_votes": dict(per_feature_category),
+            }
+        )
+
+    payload = {
+        "selected_k": int(selected_k),
+        "clusters": report_clusters,
+        "theme_summary": {
+            "Tactical": sum(
+                1
+                for cluster in report_clusters
+                if cluster.get("cluster_theme") == "Tactical"
+            ),
+            "Historical": sum(
+                1
+                for cluster in report_clusters
+                if cluster.get("cluster_theme") == "Historical"
+            ),
+            "Clubs": sum(
+                1
+                for cluster in report_clusters
+                if cluster.get("cluster_theme") == "Clubs"
+            ),
+        },
     }
 
-
-def _save_dbscan_summary_json(summary: dict[str, object], json_path: Path) -> None:
     json_path.parent.mkdir(parents=True, exist_ok=True)
     with json_path.open("w", encoding="utf-8") as fh:
-        json.dump(summary, fh, indent=2)
-    print(f"Saved DBSCAN summary JSON: {json_path}")
+        json.dump(payload, fh, indent=2)
+    print(f"Saved cluster report JSON: {json_path}")
 
 
 def run_phase_q6(
@@ -601,7 +677,7 @@ def main() -> None:
     run_dirs = create_run_output_dirs(run_id)
     top_features_csv_path = run_dirs["features_run"] / "top_10_features.csv"
     elbow_json_path = run_dirs["metrics_root"] / "elbow_sweep.json"
-    dbscan_json_path = run_dirs["metrics_run"] / "dbscan_summary.json"
+    cluster_report_json_path = run_dirs["experiment_root"] / "cluster_report.json"
     intervention_csv_path = run_dirs["experiment_root"] / "intervention_results.csv"
     metadata_json_path = run_dirs["experiment_root"] / "metadata.json"
 
@@ -629,7 +705,7 @@ def main() -> None:
         elbow_max_k=args.elbow_max_k,
         top_features_csv_path=top_features_csv_path,
         elbow_json_path=elbow_json_path,
-        dbscan_json_path=dbscan_json_path,
+        cluster_report_json_path=cluster_report_json_path,
     )
 
     model_wrapper = ModelWrapper(model_name=DEFAULT_MODEL_NAME, layer_idx=12)

@@ -36,6 +36,7 @@ def cluster_features_kmeans(
     interpreter: SAEInterpreter,
     num_clusters: int = 10,
     random_state: int = 42,
+    feature_profiles: NDArray[np.float64] | None = None,
 ) -> ClusteringResult:
     """Cluster latent features using K-Means.
 
@@ -46,6 +47,8 @@ def cluster_features_kmeans(
         interpreter: SAEInterpreter with loaded model and computed latents.
         num_clusters: Number of clusters to discover. Defaults to 10.
         random_state: Random seed for reproducibility. Defaults to 42.
+        feature_profiles: Optional precomputed feature matrix of shape
+            (num_features, num_tokens). If omitted, uses interpreter latents.
 
     Returns:
         Dictionary with keys:
@@ -64,7 +67,8 @@ def cluster_features_kmeans(
         )
 
     latents = interpreter.latents
-    feature_profiles = latents.T.cpu().numpy()
+    if feature_profiles is None:
+        feature_profiles = latents.T.cpu().numpy().astype(np.float64, copy=False)
 
     print(
         f"Running K-Means clustering on {feature_profiles.shape[0]} features "

@@ -2,10 +2,12 @@
 
 import argparse
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 
@@ -120,6 +122,132 @@ def test_verify_pilot_run_phase_q6_passes_checkpoint_to_intervention(
     )
 
     assert captured["checkpoint_path"] == checkpoint
+
+
+def test_verify_pilot_pick_dynamic_elbow_k_detects_slowdown() -> None:
+    verify_pilot = _load_script_module(
+        "verify_pilot_test_elbow", SCRIPTS_DIR / "verify_pilot.py"
+    )
+
+    best_k = verify_pilot._pick_dynamic_elbow_k(
+        k_values=[4, 6, 8, 10, 12],
+        inertias=[1000.0, 700.0, 580.0, 520.0, 490.0],
+    )
+
+    assert best_k == 6
+
+
+def test_verify_pilot_run_phase_q4_q5_uses_spherical_features_and_writes_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    verify_pilot = _load_script_module(
+        "verify_pilot_test_spherical", SCRIPTS_DIR / "verify_pilot.py"
+    )
+
+    class FakeInterpreter:
+        def __init__(self) -> None:
+            self.latents = torch.tensor(
+                [
+                    [5.0, 0.1, 0.0],
+                    [4.0, 1.0, 0.0],
+                    [0.5, 5.0, 0.0],
+                    [0.1, 4.0, 6.0],
+                ],
+                dtype=torch.float32,
+            )
+            self.metadata = [
+                {"category": "Clubs"},
+                {"category": "Clubs"},
+                {"category": "Historical"},
+                {"category": "Tactical"},
+            ]
+
+        activation_matrix = torch.randn(3, 4)
+
+        def rank_features_by_max_activation(
+            self, top_k: int = 10
+        ) -> list[dict[str, object]]:
+            _ = top_k
+            return [
+                {
+                    "rank": 1,
+                    "feature_index": 0,
+                    "max_feature_value": 5.0,
+                }
+            ]
+
+        def get_top_examples_for_feature(
+            self, feature_index: int, top_k: int = 10
+        ) -> list[dict[str, object]]:
+            _ = top_k
+            return [
+                {
+                    "token_text": f"token_{feature_index}",
+                    "feature_value": 1.0,
+                }
+            ]
+
+    captured: dict[str, object] = {}
+
+    def fake_elbow(
+        feature_profiles: np.ndarray,
+        *,
+        start_k: int,
+        step: int,
+        max_k: int,
+    ) -> tuple[int, list[dict[str, object]]]:
+        _ = (start_k, step, max_k)
+        captured["norms"] = np.linalg.norm(feature_profiles, axis=1)
+        return 2, []
+
+    def fake_cluster(
+        interpreter: object,
+        num_clusters: int,
+        random_state: int,
+        feature_profiles: np.ndarray | None = None,
+    ) -> dict[str, object]:
+        _ = (interpreter, num_clusters, random_state)
+        captured["feature_profiles"] = feature_profiles
+        return {
+            "cluster_summaries": [
+                {
+                    "cluster_id": 0,
+                    "num_features": 2,
+                    "feature_indices": [0, 1],
+                    "representative_feature": 0,
+                    "representative_tokens": ["club"],
+                },
+                {
+                    "cluster_id": 1,
+                    "num_features": 1,
+                    "feature_indices": [2],
+                    "representative_feature": 2,
+                    "representative_tokens": ["tactic"],
+                },
+            ]
+        }
+
+    monkeypatch.setattr(verify_pilot, "_print_elbow_table", fake_elbow)
+    monkeypatch.setattr(verify_pilot, "cluster_features_kmeans", fake_cluster)
+
+    cluster_report = tmp_path / "cluster_report.json"
+    verify_pilot.run_phase_q4_q5(
+        FakeInterpreter(),
+        elbow_start_k=4,
+        elbow_step=2,
+        elbow_max_k=8,
+        cluster_report_json_path=cluster_report,
+    )
+
+    norms = captured.get("norms")
+    assert isinstance(norms, np.ndarray)
+    assert np.allclose(norms, np.ones_like(norms), atol=1e-6)
+
+    payload = json.loads(cluster_report.read_text(encoding="utf-8"))
+    assert payload["selected_k"] == 2
+    assert payload["theme_summary"]["Clubs"] == 2
+    assert payload["theme_summary"]["Historical"] == 0
+    assert payload["theme_summary"]["Tactical"] == 0
 
 
 def test_verify_pilot_experiment_forwards_default_checkpoint(
