@@ -48,7 +48,7 @@ def main() -> None:
         patience=5,
         checkpoint_path=CHECKPOINTS_DIR / "sae_checkpoint.pt",
     )
-    history, train_summary = trainer.train(activation_matrix)
+    _, train_summary = trainer.train(activation_matrix)
     print(
         "Training summary: "
         f"epochs={train_summary.epochs}, "

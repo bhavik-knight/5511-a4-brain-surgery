@@ -9,6 +9,7 @@ with end-to-end run-scoped training, verification, and executive reporting.
 - [Installation](#installation)
 - [Quick Start (Local Verification)](#quick-start-local-verification)
 - [Usage Guide](#usage-guide)
+- [Reproducing the Results (7B)](#reproducing-the-results-7b)
 - [What Is Finalized](#what-is-finalized)
 - [Development Notes](#development-notes)
 - [References](#references)
@@ -99,6 +100,55 @@ uv run python scripts/generate_report.py --run-id run_YYYYMMDD_HHMM
 ```
 
 Checkpoint resolution follows the experiment hierarchy: `results/experiments/<run_id>/checkpoints/sae_best.pt`.
+
+## Reproducing the Results (7B)
+
+Use the following workflow to reproduce the final 7B pipeline.
+
+### 1. Model Acquisition
+
+```bash
+uv run hf download Qwen/Qwen2.5-7B --local-dir ./models/qwen2.5-7b
+```
+
+### 2. Activation Extraction
+
+Generate the soccer activation dataset from Layer 14 residual-stream hooks.
+
+```bash
+uv run python -m brain_surgery.data_gen
+```
+
+### 3. SAE Training
+
+Train for 100 epochs with L1 penalty 0.001.
+
+```bash
+uv run python scripts/train_university.py \
+  --epochs 100 \
+  --l1 0.001 \
+  --run-id run_20260404_1048
+```
+
+This training run was tracked in WandB as: `smu-e100-l1-0.001`.
+
+```bash
+uv run scripts/train_university.py --epochs 100 --l1 0.001 --wandb-run-name "smu-e100-l1-0.001"
+```
+
+### 4. Report Generation
+
+Synthesize interpretability findings from the final run ID.
+
+```bash
+uv run python scripts/generate_report.py --run-id run_20260404_1048
+```
+
+### Project Structure Note
+
+- Run-scoped outputs are stored under `results/experiments/`.
+- For the 7B workflow, the SAE uses a 32x expansion factor:
+  $3584 \\times 32 = 114688$ latent features.
 
 ## What Is Finalized
 

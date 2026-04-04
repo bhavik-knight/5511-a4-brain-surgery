@@ -12,6 +12,30 @@ from brain_surgery.model_wrapper import ModelWrapper, get_default_device
 from conftest import FakeCausalLM, FakeTokenizer
 
 
+def _set_generation_state(
+    wrapper: ModelWrapper,
+    *,
+    prompt: str,
+    generated_text: str,
+    output_ids: torch.Tensor,
+    token_texts: list[str],
+    token_strs: list[str] | None = None,
+) -> None:
+    """Populate wrapper generation metadata for serialization-focused tests."""
+    setattr(wrapper, "_last_prompt", prompt)
+    setattr(wrapper, "_last_generated_text", generated_text)
+    setattr(wrapper, "_last_output_ids", output_ids)
+    setattr(wrapper, "_last_token_texts", token_texts)
+    token_str_values = token_strs if token_strs is not None else token_texts
+    setattr(wrapper, "_last_token_strs", token_str_values)
+
+
+def _call_protected(obj: object, name: str, *args: object, **kwargs: object) -> object:
+    """Invoke a protected member in tests without direct protected access syntax."""
+    member = getattr(obj, name)
+    return member(*args, **kwargs)
+
+
 def test_default_layer_uses_14_for_a100_optimized(
     mock_model_wrapper_24: ModelWrapper,
 ) -> None:
@@ -158,10 +182,13 @@ def test_save_activations_shape_guards(
 ) -> None:
     """Verify shape guards for invalid activation tensor ranks/batch sizes."""
     mock_model_wrapper_24.activations["layer"] = torch.randn(2, 3, 896)
-    mock_model_wrapper_24._last_prompt = "x"  # noqa: SLF001
-    mock_model_wrapper_24._last_generated_text = "y"  # noqa: SLF001
-    mock_model_wrapper_24._last_output_ids = torch.tensor([[1, 2, 3]])  # noqa: SLF001
-    mock_model_wrapper_24._last_token_texts = ["a", "b", "c"]  # noqa: SLF001
+    _set_generation_state(
+        mock_model_wrapper_24,
+        prompt="x",
+        generated_text="y",
+        output_ids=torch.tensor([[1, 2, 3]]),
+        token_texts=["a", "b", "c"],
+    )
     with pytest.raises(ValueError):
         mock_model_wrapper_24.save_activations()
 
@@ -175,10 +202,14 @@ def test_save_activations_no_tokens_raises(
 ) -> None:
     """Verify alignment guard rejects empty token/activation intersections."""
     mock_model_wrapper_24.activations["layer"] = torch.empty(0, 896)
-    mock_model_wrapper_24._last_prompt = "x"  # noqa: SLF001
-    mock_model_wrapper_24._last_generated_text = "y"  # noqa: SLF001
-    mock_model_wrapper_24._last_output_ids = torch.tensor([[]], dtype=torch.long)  # noqa: SLF001
-    mock_model_wrapper_24._last_token_texts = []  # noqa: SLF001
+    _set_generation_state(
+        mock_model_wrapper_24,
+        prompt="x",
+        generated_text="y",
+        output_ids=torch.tensor([[]], dtype=torch.long),
+        token_texts=[],
+        token_strs=[],
+    )
     with pytest.raises(ValueError):
         mock_model_wrapper_24.save_activations()
 
@@ -189,7 +220,9 @@ def test_gitignore_large_artifact_appends_pattern(tmp_path: Path) -> None:
     artifact.write_bytes(b"x" * 2048)
     gitignore = tmp_path / ".gitignore"
 
-    ModelWrapper._gitignore_large_artifact(
+    _call_protected(
+        ModelWrapper,
+        "_gitignore_large_artifact",
         artifact_path=artifact,
         gitignore_path=gitignore,
         max_mb=0,
@@ -253,7 +286,9 @@ def test_infer_model_input_device_fallbacks(
             yield torch.nn.Parameter(torch.zeros(1))
 
     monkeypatch.setattr(mock_model_wrapper_24, "model", StrDeviceModel())
-    assert mock_model_wrapper_24._infer_model_input_device().type == "cpu"
+    inferred = _call_protected(mock_model_wrapper_24, "_infer_model_input_device")
+    assert isinstance(inferred, torch.device)
+    assert inferred.type == "cpu"
 
     class EmptyParamsModel:
         device = None
@@ -265,7 +300,9 @@ def test_infer_model_input_device_fallbacks(
 
     mock_model_wrapper_24.device = torch.device("cpu")
     monkeypatch.setattr(mock_model_wrapper_24, "model", EmptyParamsModel())
-    assert mock_model_wrapper_24._infer_model_input_device().type == "cpu"
+    inferred = _call_protected(mock_model_wrapper_24, "_infer_model_input_device")
+    assert isinstance(inferred, torch.device)
+    assert inferred.type == "cpu"
 
 
 def test_save_activations_version_and_folder_gitignore(tmp_path: Path) -> None:
@@ -276,11 +313,14 @@ def test_save_activations_version_and_folder_gitignore(tmp_path: Path) -> None:
     model.device = torch.device("cpu")
     model.activation_device = torch.device("cpu")
     model.activations = {"layer": torch.randn(3, 896)}
-    model._last_prompt = "p"
-    model._last_generated_text = "g"
-    model._last_output_ids = torch.tensor([[1, 2, 3]], dtype=torch.long)
-    model._last_token_texts = ["a", "b", "c"]
-    model._last_token_strs = ["a", "b", "c"]
+    _set_generation_state(
+        model,
+        prompt="p",
+        generated_text="g",
+        output_ids=torch.tensor([[1, 2, 3]], dtype=torch.long),
+        token_texts=["a", "b", "c"],
+        token_strs=["a", "b", "c"],
+    )
 
     save_dir = tmp_path / "acts"
     save_dir.mkdir()
@@ -308,11 +348,14 @@ def test_save_activations_keep_device_branch(tmp_path: Path) -> None:
     model.device = torch.device("cpu")
     model.activation_device = torch.device("cpu")
     model.activations = {"layer": torch.randn(3, 896)}
-    model._last_prompt = "p"
-    model._last_generated_text = "g"
-    model._last_output_ids = torch.tensor([[1, 2, 3]], dtype=torch.long)
-    model._last_token_texts = ["a", "b", "c"]
-    model._last_token_strs = ["a", "b", "c"]
+    _set_generation_state(
+        model,
+        prompt="p",
+        generated_text="g",
+        output_ids=torch.tensor([[1, 2, 3]], dtype=torch.long),
+        token_texts=["a", "b", "c"],
+        token_strs=["a", "b", "c"],
+    )
 
     out = model.save_activations(
         save_dir=tmp_path,
@@ -361,7 +404,7 @@ def test_resolve_transformer_layers_error_branch(
     """Verify unsupported model architecture fails in layer resolver."""
     monkeypatch.setattr(mock_model_wrapper_24, "model", object())
     with pytest.raises(RuntimeError):
-        mock_model_wrapper_24._resolve_transformer_layers()
+        _call_protected(mock_model_wrapper_24, "_resolve_transformer_layers")
 
 
 def test_generate_without_hooks_returns_empty_activation_dict(
@@ -398,20 +441,20 @@ def test_generate_decode_list_and_token_str_single_string(
         "x", max_tokens=2
     )
     assert text == "decoded-list"
-    assert mock_model_wrapper_24._last_token_strs == ["tok"]  # noqa: SLF001
+    assert mock_model_wrapper_24.last_token_strs == ["tok"]
 
 
 def test_total_layers_error_paths(mock_model_wrapper_24: ModelWrapper) -> None:
     """Verify total_layers raises for unloaded model and missing config metadata."""
     wrapper = ModelWrapper.__new__(ModelWrapper)
-    wrapper.model = None
-    wrapper.tokenizer = None
+    setattr(wrapper, "model", None)
+    setattr(wrapper, "tokenizer", None)
     with pytest.raises(RuntimeError):
         _ = wrapper.total_layers
 
     wrapper2 = ModelWrapper.__new__(ModelWrapper)
-    wrapper2.model = SimpleNamespace(config=SimpleNamespace())
-    wrapper2.tokenizer = object()
+    setattr(wrapper2, "model", SimpleNamespace(config=SimpleNamespace()))
+    setattr(wrapper2, "tokenizer", object())
     with pytest.raises(RuntimeError):
         _ = wrapper2.total_layers
 
@@ -425,7 +468,8 @@ def test_resolve_transformer_layers_transformer_h_branch(
         transformer=SimpleNamespace(h=torch.nn.ModuleList([torch.nn.Identity()]))
     )
     monkeypatch.setattr(mock_model_wrapper_24, "model", alt)
-    layers = mock_model_wrapper_24._resolve_transformer_layers()
+    layers = _call_protected(mock_model_wrapper_24, "_resolve_transformer_layers")
+    assert isinstance(layers, torch.nn.ModuleList)
     assert len(layers) == 1
 
 
@@ -434,7 +478,7 @@ def test_register_hooks_layer_index_out_of_range_runtime() -> None:
     wrapper = ModelWrapper.__new__(ModelWrapper)
     wrapper.layer_idx = 5
     wrapper.hooks = []
-    wrapper._activation_steps = []
+    setattr(wrapper, "_activation_steps", [])
     wrapper.activation_device = torch.device("cpu")
     setattr(
         wrapper,
@@ -442,7 +486,7 @@ def test_register_hooks_layer_index_out_of_range_runtime() -> None:
         lambda: torch.nn.ModuleList([torch.nn.Identity()]),
     )
     with pytest.raises(RuntimeError):
-        wrapper._register_hooks()
+        _call_protected(wrapper, "_register_hooks")
 
 
 def test_generate_sets_pad_token_when_missing(
@@ -492,14 +536,16 @@ def test_generate_sequences_object_success_branch(
     )
     text, _acts = mock_model_wrapper_24.generate_with_activations("hello", max_tokens=2)
     assert isinstance(text, str)
-    assert isinstance(mock_model_wrapper_24._last_output_ids, torch.Tensor)  # noqa: SLF001
+    assert isinstance(mock_model_wrapper_24.last_output_ids, torch.Tensor)
 
 
 def test_gitignore_large_artifact_oserror_and_existing_pattern(tmp_path: Path) -> None:
     """Verify gitignore helper safely handles stat errors and duplicate patterns."""
     missing = tmp_path / "missing.pt"
     gitignore = tmp_path / ".gitignore"
-    ModelWrapper._gitignore_large_artifact(
+    _call_protected(
+        ModelWrapper,
+        "_gitignore_large_artifact",
         artifact_path=missing,
         gitignore_path=gitignore,
         max_mb=0,
@@ -511,7 +557,9 @@ def test_gitignore_large_artifact_oserror_and_existing_pattern(tmp_path: Path) -
     artifact.write_bytes(b"x" * 2048)
     gitignore.write_text(str(artifact).replace("\\", "/"), encoding="utf-8")
     before = gitignore.read_text(encoding="utf-8")
-    ModelWrapper._gitignore_large_artifact(
+    _call_protected(
+        ModelWrapper,
+        "_gitignore_large_artifact",
         artifact_path=artifact,
         gitignore_path=gitignore,
         max_mb=0,

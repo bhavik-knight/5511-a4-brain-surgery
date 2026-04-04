@@ -29,6 +29,7 @@ $$
 
 where reconstruction preserves information and $L_1$ regularization promotes
 feature selectivity.
+s
 
 ## Implementation
 

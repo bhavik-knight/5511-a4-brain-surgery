@@ -24,6 +24,7 @@ from typing import Literal, cast
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch.utils.hooks import RemovableHandle
 
 from transformers import (
     AutoModelForCausalLM,
@@ -165,7 +166,7 @@ class ModelWrapper:
         # Storage for captured activations
         self.activations: dict[str, Tensor] = {}
         self._activation_steps: list[Tensor] = []
-        self.hooks: list[torch.utils.hooks.RemovableHandle] = []
+        self.hooks: list[RemovableHandle] = []
 
         # Metadata for saving (populated by generate_with_activations)
         self._last_prompt: str | None = None
@@ -209,7 +210,27 @@ class ModelWrapper:
         Returns:
             True if both model and tokenizer are loaded, False otherwise.
         """
-        return self.model is not None and self.tokenizer is not None
+        return hasattr(self, "model") and hasattr(self, "tokenizer")
+
+    @property
+    def last_token_texts(self) -> list[str] | None:
+        """Read-only access to most recently generated token texts."""
+        return self._last_token_texts
+
+    @property
+    def last_token_strs(self) -> list[str] | None:
+        """Read-only access to most recently generated token string forms."""
+        return self._last_token_strs
+
+    @property
+    def last_output_ids(self) -> Tensor | None:
+        """Read-only access to most recently generated output token IDs."""
+        return self._last_output_ids
+
+    @property
+    def last_generated_text(self) -> str | None:
+        """Read-only access to most recently generated full text."""
+        return self._last_generated_text
 
     @property
     def total_layers(self) -> int:

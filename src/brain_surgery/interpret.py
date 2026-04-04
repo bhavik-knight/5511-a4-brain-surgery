@@ -350,7 +350,7 @@ class SAEInterpreter:
         # Rank sparse features by max activation
         sparse_max_vals = max_vals[sparse_indices]
         top_k = min(k, len(sparse_indices))
-        top_k_sparse_vals, top_k_local_indices = torch.topk(sparse_max_vals, k=top_k)
+        _, top_k_local_indices = torch.topk(sparse_max_vals, k=top_k)
 
         # Map back to global feature indices
         final_feature_indices = sparse_indices[top_k_local_indices].tolist()

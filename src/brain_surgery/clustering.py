@@ -82,6 +82,7 @@ def _torch_spherical_kmeans(
 
     init_idx = torch.randperm(n_points, generator=gen)[:num_clusters]
     centers = x[init_idx].clone()
+    labels = torch.argmax(x @ centers.T, dim=1)
 
     prev_labels: torch.Tensor | None = None
     n_iter = 0

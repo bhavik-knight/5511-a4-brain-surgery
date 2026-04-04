@@ -8,6 +8,8 @@ Environment and install:
 
 - `uv sync`
   - Creates/updates `.venv` from `pyproject.toml` and lock state, and installs the local package in editable mode through uv project settings.
+- `uv add <package>`
+  - Use this for dependency changes so `pyproject.toml` remains the single source of truth.
 
 Minimum viable command:
 
@@ -49,25 +51,30 @@ Run tests:
 
 1. Prompt source and corpus intent:
 
-- Assignment intent points to `data/corpus/`, but the active 118-prompt production list is currently embedded in `src/brain_surgery/data_gen.py` (`load_corpus()`).
+- Prompt corpus is loaded from `data/corpus/soccer_prompts.ndjson` by `src/brain_surgery/data_gen.py` (`load_corpus()`).
+- The current curated corpus contains 170 soccer-domain prompts (may evolve over time).
 
-2. Model hook capture:
+1. Model hook capture:
 
 - Model and layer/device defaults are configured in `src/brain_surgery/model_wrapper.py`.
 - The hook is registered with `register_forward_hook(...)`.
 - Hook callback captures residual activations and appends per-step tensors to `_activation_steps`.
 
-3. Dataset assembly:
+1. Dataset assembly:
 
 - Batch/prompt loop and activation collection happen in `src/brain_surgery/data_gen.py` (`generate_dataset()`).
 - Token/activation alignment metadata is built with token text/str/id + prompt/layer fields.
 - Consolidated dataset tensor is saved as `data/activations/soccer_activations_dataset.pt`.
 
-4. Latent projection (SAE):
+1. Latent projection (SAE):
 
-- Encoder projects activations to 3584 sparse latents in `src/brain_surgery/sae.py` (`encode()`).
+- SAE defaults are 7B-oriented in `src/brain_surgery/sae.py`:
+  - Input dim: 3584
+  - Expansion factor: 32
+  - Latent dim: $3584 \\times 32 = 114688$
+- During training, `scripts/train_university.py` infers the SAE input width from the dataset tensor to prevent shape mismatches.
 
-5. Discovery/interpretation:
+1. Discovery/interpretation:
 
 - Latents for all tokens are computed in `src/brain_surgery/interpret.py` (`compute_latents()`).
 - Feature ranking and top examples are done via `rank_features_by_max_activation()` and `get_top_examples_for_feature()`.
@@ -115,6 +122,11 @@ Trainer objective and optimizer:
 - Adam optimizer in `src/brain_surgery/trainer.py`.
 - Training loop uses SAE `compute_loss(...)` outputs.
 - Dead-neuron metric computed from zero-activation latent units each epoch, with explicit epoch-1 print.
+
+Dimension safety:
+
+- Training entrypoint validates dataset tensor shape and infers model dimensions from `activation_matrix.shape[1]`.
+- This avoids hardcoded-width failures when switching model sizes.
 
 ### Q4 & Q5: Interpretability
 
@@ -189,8 +201,8 @@ Core suite entrypoint:
 What is covered now:
 
 - `tests/test_model_wrapper.py`: midpoint default layer selection for 24-layer models, activation shape checks, and loaded-state checks.
-- `tests/test_data_gen.py`: 118-prompt corpus count and token/activation alignment behavior (`seq_len = min(...)`).
-- `tests/test_sae.py`: 896 -> 3584 projection shape, tied-weight decode behavior, and L1 contribution in total loss.
+- `tests/test_data_gen.py`: NDJSON corpus loading and token/activation alignment behavior (`seq_len = min(...)`).
+- `tests/test_sae.py`: shape behavior, tied-weight decode behavior, and L1 contribution in total loss.
 - `tests/test_intervention.py`: clamp-hook activation modification, dtype preservation, and next-token log-prob delta verification.
 - `tests/test_env.py`: dotenv loading for `WANDB_API_KEY` in headless workflows.
 - `tests/test_activation_capture.py`: activation capture save/load and token-to-activation mapping checks.
@@ -201,6 +213,17 @@ Why this matters:
 
 ## 6. Important Audit Note
 
-Your assignment wording says prompts start in `data/corpus/`, but current implementation hardcodes the 118 prompts in `data_gen.py` (`load_corpus()`).
+Prompt loading is now file-based (`data/corpus/soccer_prompts.ndjson`), which improves traceability and makes corpus evolution explicit in version history.
 
-This works functionally. If strict traceability is needed, move prompts into a file under `data/corpus/` and make `load_corpus()` read from disk.
+## 7. Dependency and Artifact Hygiene
+
+Dependency source of truth:
+
+- Keep dependencies in `pyproject.toml` only.
+- Do not rely on generated `*.egg-info/requires.txt` metadata; those files are build artifacts.
+
+Generated artifacts to keep out of source control:
+
+- Packaging metadata: `*.egg-info/` contents such as `PKG-INFO`, `SOURCES.txt`, `top_level.txt`.
+- Local experiment logs: `wandb/`, `runs/`, and `.coverage`.
+- Terminal scratch outputs (for example `test1.txt`, `test2.txt`, `test3.txt`) should be deleted or archived under `results/terminal_outputs/` when needed.

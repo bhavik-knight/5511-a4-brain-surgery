@@ -7,7 +7,7 @@ corpus through a ModelWrapper and saving token-aligned activations.
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, TypedDict
+from typing import Protocol, TypedDict, cast
 
 import torch
 from torch import Tensor
@@ -39,22 +39,22 @@ class ActivationWrapper(Protocol):
         ...
 
     @property
-    def _last_token_texts(self) -> list[str] | None:
+    def last_token_texts(self) -> list[str] | None:
         """Most recent decoded token text list from generation."""
         ...
 
     @property
-    def _last_token_strs(self) -> list[str] | None:
+    def last_token_strs(self) -> list[str] | None:
         """Most recent token strings aligned with token ids."""
         ...
 
     @property
-    def _last_output_ids(self) -> Tensor | None:
+    def last_output_ids(self) -> Tensor | None:
         """Most recent generated token ids tensor."""
         ...
 
     @property
-    def _last_generated_text(self) -> str | None:
+    def last_generated_text(self) -> str | None:
         """Most recent generated text string."""
         ...
 
@@ -262,14 +262,31 @@ class DataGenerator:
                 activation_chunks.append(acts_2d)
 
                 # Use internal token metadata from the wrapper for alignment.
-                token_texts = self.wrapper._last_token_texts or []  # noqa: SLF001
-                token_strs = self.wrapper._last_token_strs or []  # noqa: SLF001
-                token_ids = []
-                if self.wrapper._last_output_ids is not None:  # noqa: SLF001
-                    token_ids = (
-                        self.wrapper._last_output_ids[0].tolist()  # noqa: SLF001
+                token_texts_obj = getattr(self.wrapper, "last_token_texts", None)
+                if token_texts_obj is None:
+                    token_texts_obj = getattr(self.wrapper, "_last_token_texts", None)
+                token_texts = cast(list[str], token_texts_obj or [])
+
+                token_strs_obj = getattr(self.wrapper, "last_token_strs", None)
+                if token_strs_obj is None:
+                    token_strs_obj = getattr(self.wrapper, "_last_token_strs", None)
+                token_strs = cast(list[str], token_strs_obj or [])
+
+                token_ids: list[int] = []
+                output_ids_obj = getattr(self.wrapper, "last_output_ids", None)
+                if output_ids_obj is None:
+                    output_ids_obj = getattr(self.wrapper, "_last_output_ids", None)
+                if output_ids_obj is not None:
+                    token_ids = cast(
+                        list[int], cast(Tensor, output_ids_obj)[0].tolist()
                     )
-                generated_text = self.wrapper._last_generated_text or ""  # noqa: SLF001
+
+                generated_text_obj = getattr(self.wrapper, "last_generated_text", None)
+                if generated_text_obj is None:
+                    generated_text_obj = getattr(
+                        self.wrapper, "_last_generated_text", None
+                    )
+                generated_text = str(generated_text_obj or "")
 
                 seq_len = min(len(token_texts), acts_2d.shape[0])
                 seq_lens.append(seq_len)

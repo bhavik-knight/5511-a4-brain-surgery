@@ -19,6 +19,22 @@ class MockWrapper:
         self._last_generated_text: str | None = None
         self.saved: list[tuple[int, str]] = []
 
+    @property
+    def last_token_texts(self) -> list[str] | None:
+        return self._last_token_texts
+
+    @property
+    def last_token_strs(self) -> list[str] | None:
+        return self._last_token_strs
+
+    @property
+    def last_output_ids(self) -> torch.Tensor | None:
+        return self._last_output_ids
+
+    @property
+    def last_generated_text(self) -> str | None:
+        return self._last_generated_text
+
     def generate_with_activations(
         self,
         prompt: str,
