@@ -41,25 +41,20 @@ def _print_header(title: str) -> None:
     print("=" * 88)
 
 
-def _resolve_path(path: Path) -> Path:
-    """Resolve a potentially user-relative path to an absolute path."""
-    return Path(path).expanduser().resolve()
-
-
 def _validate_default_files(checkpoint_path: Path, dataset_path: Path) -> None:
-    checkpoint_abs = _resolve_path(checkpoint_path)
-    dataset_abs = _resolve_path(dataset_path)
+    checkpoint_local = Path(checkpoint_path).expanduser()
+    dataset_local = Path(dataset_path).expanduser()
 
     missing: list[Path] = []
-    if not checkpoint_abs.exists():
-        missing.append(checkpoint_abs)
-    if not dataset_abs.exists():
-        missing.append(dataset_abs)
+    if not checkpoint_local.exists():
+        missing.append(checkpoint_local)
+    if not dataset_local.exists():
+        missing.append(dataset_local)
 
     if missing:
         lines = "\n".join(f"- {path}" for path in missing)
         raise FileNotFoundError(
-            "Required pilot artifacts are missing (absolute paths checked):\n"
+            "Required pilot artifacts are missing (paths checked):\n"
             f"{lines}\n"
             "Generate them first (golden run / training pipeline), then retry."
         )
@@ -77,9 +72,8 @@ def _resolve_checkpoint_path(args: argparse.Namespace, run_id: str) -> Path:
         return Path(args.checkpoint)
 
     run_checkpoint = EXPERIMENTS_DIR / run_id / "checkpoints" / "sae_best.pt"
-    run_checkpoint_abs = _resolve_path(run_checkpoint)
-    if run_checkpoint_abs.exists():
-        return run_checkpoint_abs
+    if run_checkpoint.exists():
+        return run_checkpoint
 
     return DEFAULT_CHECKPOINT
 
@@ -387,6 +381,7 @@ def run_phase_q6(
     interpreter: SAEInterpreter,
     model_wrapper: ModelWrapper,
     *,
+    checkpoint_path: Path,
     intervention_csv_path: Path | None = None,
 ) -> tuple[dict[str, float], dict[str, float], dict[str, float], SAEIntervention]:
     """Run Ronaldo intervention and print baseline vs clamped deltas for Q6."""
@@ -394,7 +389,7 @@ def run_phase_q6(
 
     intervention = SAEIntervention(
         model_wrapper=model_wrapper,
-        checkpoint_path=DEFAULT_CHECKPOINT,
+        checkpoint_path=checkpoint_path,
         device="cpu",
     )
 
@@ -641,6 +636,7 @@ def main() -> None:
     _, _, _, intervention = run_phase_q6(
         interpreter,
         model_wrapper,
+        checkpoint_path=checkpoint_path,
         intervention_csv_path=intervention_csv_path,
     )
 

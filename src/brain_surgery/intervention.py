@@ -80,7 +80,8 @@ class SAEIntervention:
         if self.checkpoint_path is None:
             raise ValueError("checkpoint_path must be provided to load SAE")
 
-        checkpoint = torch.load(self.checkpoint_path, map_location="cpu")
+        checkpoint_file = Path(self.checkpoint_path).expanduser().resolve()
+        checkpoint = torch.load(checkpoint_file, map_location="cpu")
         input_dim = checkpoint["input_dim"]
         latent_dim = checkpoint["latent_dim"]
 
@@ -298,10 +299,8 @@ class SAEIntervention:
         }
 
         with torch.no_grad():
-            generated_ids = self.model_wrapper.model.generate(
-                **inputs,
-                **generation_kwargs,
-            )
+            generate_fn = getattr(self.model_wrapper.model, "generate")
+            generated_ids = cast(Tensor, generate_fn(**inputs, **generation_kwargs))
 
         self.remove_hook()
 
