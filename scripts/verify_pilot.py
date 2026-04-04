@@ -23,15 +23,16 @@ from brain_surgery.utils import (
     ACTIVATIONS_DIR,
     CHECKPOINTS_DIR,
     DEFAULT_MODEL_NAME,
+    EXPERIMENTS_DIR,
     create_run_output_dirs,
     generate_run_id,
 )
 
 DEFAULT_CHECKPOINT = CHECKPOINTS_DIR / "sae_checkpoint.pt"
 DEFAULT_DATASET = ACTIVATIONS_DIR / "soccer_activations_dataset.pt"
-DEFAULT_ELBOW_START_K = 2
-DEFAULT_ELBOW_STEP = 1
-DEFAULT_ELBOW_MAX_K = 40
+DEFAULT_ELBOW_START_K = 4
+DEFAULT_ELBOW_STEP = 2
+DEFAULT_ELBOW_MAX_K = 20
 
 
 def _print_header(title: str) -> None:
@@ -40,20 +41,47 @@ def _print_header(title: str) -> None:
     print("=" * 88)
 
 
+def _resolve_path(path: Path) -> Path:
+    """Resolve a potentially user-relative path to an absolute path."""
+    return Path(path).expanduser().resolve()
+
+
 def _validate_default_files(checkpoint_path: Path, dataset_path: Path) -> None:
+    checkpoint_abs = _resolve_path(checkpoint_path)
+    dataset_abs = _resolve_path(dataset_path)
+
     missing: list[Path] = []
-    if not checkpoint_path.exists():
-        missing.append(checkpoint_path)
-    if not dataset_path.exists():
-        missing.append(dataset_path)
+    if not checkpoint_abs.exists():
+        missing.append(checkpoint_abs)
+    if not dataset_abs.exists():
+        missing.append(dataset_abs)
 
     if missing:
         lines = "\n".join(f"- {path}" for path in missing)
         raise FileNotFoundError(
-            "Required pilot artifacts are missing:\n"
+            "Required pilot artifacts are missing (absolute paths checked):\n"
             f"{lines}\n"
             "Generate them first (golden run / training pipeline), then retry."
         )
+
+
+def _resolve_checkpoint_path(args: argparse.Namespace, run_id: str) -> Path:
+    """Resolve checkpoint path with run-aware fallback logic.
+
+    Priority:
+    1. Explicit `--checkpoint` if provided.
+    2. `results/experiments/<run_id>/checkpoints/sae_best.pt` if it exists.
+    3. Global default checkpoint path.
+    """
+    if args.checkpoint is not None:
+        return Path(args.checkpoint)
+
+    run_checkpoint = EXPERIMENTS_DIR / run_id / "checkpoints" / "sae_best.pt"
+    run_checkpoint_abs = _resolve_path(run_checkpoint)
+    if run_checkpoint_abs.exists():
+        return run_checkpoint_abs
+
+    return DEFAULT_CHECKPOINT
 
 
 def _safe_token_text(value: object) -> str:
@@ -72,7 +100,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint",
         type=Path,
-        default=DEFAULT_CHECKPOINT,
+        default=None,
         help="Path to SAE checkpoint (.pt).",
     )
     parser.add_argument(
@@ -572,9 +600,9 @@ def _save_metadata_report(interpreter: SAEInterpreter, out_path: Path) -> bool:
 def main() -> None:
     """Run full pilot verification report for Q4/Q5/Q6."""
     args = _parse_args()
-    checkpoint_path = args.checkpoint
-    dataset_path = args.dataset
     run_id = args.run_id or generate_run_id()
+    checkpoint_path = _resolve_checkpoint_path(args, run_id)
+    dataset_path = args.dataset
     run_dirs = create_run_output_dirs(run_id)
     top_features_csv_path = run_dirs["features_run"] / "top_10_features.csv"
     elbow_json_path = run_dirs["metrics_root"] / "elbow_sweep.json"
