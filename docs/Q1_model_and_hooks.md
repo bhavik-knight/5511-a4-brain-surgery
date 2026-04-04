@@ -11,7 +11,7 @@ language generation and mechanistic analysis.
 Let $h\_\\ell$ denote hidden states at layer $\\ell$. Q1 operationalizes:
 
 $$
-ext{text prompt} \\rightarrow h\_\\ell \\rightarrow \\text{token-aligned activation rows}
+\\mathrm{prompt} \\rightarrow h\_\\ell \\rightarrow \\mathrm{token\\ alignment\\ rows}
 $$
 
 These rows become the substrate for SAE training (Q3), feature interpretation
@@ -36,3 +36,9 @@ These rows become the substrate for SAE training (Q3), feature interpretation
 ## Current Status
 
 Q1 is complete and provides the activation interface consumed by Q2-Q6.
+
+## Code Entry Points
+
+- Module: `src/brain_surgery/model_wrapper.py`
+- Core generation hook path: `ModelWrapper.generate_with_activations(...)`
+- Typical script-level launcher: `python -m brain_surgery.model_wrapper`

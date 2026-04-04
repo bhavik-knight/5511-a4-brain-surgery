@@ -1,0 +1,106 @@
+{
+  "selected_k": 8,
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "cluster_size": 1628,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "cluster_cohesion": 0.9942814723730754,
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 1628
+      }
+    },
+    {
+      "cluster_id": 1,
+      "cluster_size": 384,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "cluster_cohesion": 0.7206164550571899,
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 384
+      }
+    },
+    {
+      "cluster_id": 2,
+      "cluster_size": 435,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "cluster_cohesion": 0.7398065715644244,
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 435
+      }
+    },
+    {
+      "cluster_id": 3,
+      "cluster_size": 278,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "cluster_cohesion": 0.4469306459566268,
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 278
+      }
+    },
+    {
+      "cluster_id": 4,
+      "cluster_size": 229,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "cluster_cohesion": 0.5760054355444635,
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 229
+      }
+    },
+    {
+      "cluster_id": 5,
+      "cluster_size": 239,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "cluster_cohesion": 0.5296463041905507,
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 239
+      }
+    },
+    {
+      "cluster_id": 6,
+      "cluster_size": 256,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "cluster_cohesion": 0.4067654485985499,
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 256
+      }
+    },
+    {
+      "cluster_id": 7,
+      "cluster_size": 135,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "cluster_cohesion": 0.8865623349495494,
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 135
+      }
+    }
+  ],
+  "theme_summary": {
+    "Tactical": 8,
+    "Historical": 0,
+    "Clubs": 0
+  }
+}

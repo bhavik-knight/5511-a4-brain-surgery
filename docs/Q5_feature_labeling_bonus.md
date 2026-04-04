@@ -27,3 +27,10 @@ with metadata categories instead of arbitrary geometric artifacts.
   - cross-cluster theme summary.
 - This turns feature labeling from subjective inspection into a metadata-driven
   validation protocol.
+
+## Code Entry Points
+
+- Clustering core: `src/brain_surgery/clustering.py` -> `cluster_features_kmeans(...)`
+- Elbow selector: `scripts/verify_pilot.py` -> `_pick_dynamic_elbow_k(...)`
+- Q5 phase runner: `scripts/verify_pilot.py` -> `run_phase_q4_q5(...)`
+- Purity exporter: `scripts/verify_pilot.py` -> `_save_cluster_report(...)`

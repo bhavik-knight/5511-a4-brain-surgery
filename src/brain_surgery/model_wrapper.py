@@ -122,7 +122,7 @@ class ModelWrapper:
 
         model_dir = Path(model_name)
         if not model_dir.is_absolute():
-            model_dir = (ROOT_DIR / model_dir).resolve()
+            model_dir = ROOT_DIR / model_dir
         if not model_dir.exists():
             raise FileNotFoundError(
                 "Local model directory not found: "

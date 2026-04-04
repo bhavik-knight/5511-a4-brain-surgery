@@ -1,0 +1,5 @@
+token,baseline,target_delta,control_delta,specificity
+Ronaldo,,,,
+Messi,,,,
+football,-13.046875,-3.234375,-5.984375,2.75
+goal,-18.40625,-2.203125,5.1875,-7.390625

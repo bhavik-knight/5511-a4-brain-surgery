@@ -10,7 +10,7 @@ token contexts that maximally activate each feature.
 Interpretation operator:
 
 $$
-ext{Feature } j \\Rightarrow \\operatorname\*{TopK}_{i}(z_{i,j})
+\\mathrm{Feature}\\ j \\Rightarrow \\operatorname\*{TopK}_{i}(z_{i,j})
 $$
 
 where the highest-activation rows provide candidate meanings for feature $j$.
@@ -29,3 +29,10 @@ where the highest-activation rows provide candidate meanings for feature $j$.
   themes and validating cluster purity by metadata category.
 - Output artifacts are integrated into run-scoped reports rather than global,
   ambiguous paths.
+
+## Code Entry Points
+
+- Module: `src/brain_surgery/interpret.py`
+- Latent computation: `SAEInterpreter.compute_latents(...)`
+- Feature ranking: `SAEInterpreter.rank_features_by_max_activation(...)`
+- Evidence lookup: `SAEInterpreter.get_top_examples_for_feature(...)`

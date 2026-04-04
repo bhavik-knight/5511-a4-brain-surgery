@@ -1,0 +1,42 @@
+wandb: [wandb.login()] Using explicit session credentials for https://api.wandb.ai.
+wandb: Appending key for api.wandb.ai to your netrc file: /home/bhavik/.netrc
+wandb: Currently logged in as: bhavik-kantilal-bhagat (bk-smu) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run s5j3bghd
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2322/logs/wandb/wandb/run-20260403_232226-s5j3bghd
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run rural-cherry-9
+wandb: ⭐️ View project at https://wandb.ai/bk-smu/a4-brain-surgery
+wandb: 🚀 View run at https://wandb.ai/bk-smu/a4-brain-surgery/runs/s5j3bghd
+wandb: updating run metadata; uploading artifact sae-checkpoint
+wandb: uploading artifact sae-checkpoint
+wandb: uploading history steps 0-0, summary
+wandb:
+wandb: Run history:
+wandb: dead_neuron_fraction ▁
+wandb:                epoch ▁
+wandb:              l1_loss ▁
+wandb:             mse_loss ▁
+wandb:           total_loss ▁
+wandb:
+wandb: Run summary:
+wandb: dead_neuron_fraction 0
+wandb:                epoch 1
+wandb:              l1_loss 0.31136
+wandb:             mse_loss 11.7506
+wandb:           total_loss 11.75123
+wandb:
+wandb: 🚀 View run rural-cherry-9 at: https://wandb.ai/bk-smu/a4-brain-surgery/runs/s5j3bghd
+wandb: ⭐️ View project at: https://wandb.ai/bk-smu/a4-brain-surgery
+wandb: Synced 5 W&B file(s), 0 media file(s), 2 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./results/experiments/run_20260403_2322/logs/wandb/wandb/run-20260403_232226-s5j3bghd/logs
+Run ID: run_20260403_2322
+Run dir: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2322
+Checkpoint output: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2322/checkpoints/sae_best.pt
+TensorBoard dir: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2322/logs/tensorboard
+WandB dir: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/experiments/run_20260403_2322/logs/wandb
+Smoke test active: running 1 epoch on subset with 449 token rows (from first 5 prompts).
+Epoch 1/1 | Loss: 11.7512 | Recon: 11.7506 | L1: 0.3114
+Dead-Neuron Fraction after Epoch 1: 0.0000
+Saved training summary: /home/bhavik/Dropbox/edu/smu/winter/deep_learning/MCDA5511/a4-brain-surgery/results/metrics/training_losses_run_20260403_2322.json
+Training complete: epochs=1, final_loss=11.751226, dead_neuron_fraction=0.000000

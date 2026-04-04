@@ -14,7 +14,7 @@ feature superposition.
 Objective:
 
 $$
-\\mathcal{L} = \\text{MSE}(x, \\hat{x}) + \\lambda |z|\_1
+\\mathcal{L} = \\operatorname{MSE}(x, \\hat{x}) + \\lambda \\lVert z \\rVert_1
 $$
 
 where reconstruction preserves information and $L_1$ regularization promotes
@@ -43,3 +43,9 @@ feature selectivity.
 ## Current Status
 
 Q3 is complete and produces reproducible checkpoints compatible with Q4-Q6.
+
+## Code Entry Points
+
+- Model definition: `src/brain_surgery/sae.py` -> `SparseAutoencoder`
+- Training loop: `src/brain_surgery/trainer.py` -> `SAETrainer.train(...)`
+- Run launcher: `scripts/train_university.py` -> `main()` / `parse_args()`

@@ -28,12 +28,12 @@ where $j$ is a target feature and $\\alpha$ is a clamp multiplier.
 - Q6 reporting uses a specificity logic:
 
 $$
-\\Delta\_{target} = p\_{target} - p\_{baseline}, \\quad
-\\Delta\_{control} = p\_{control} - p\_{baseline}
+\\Delta\_{\\text{target}} = p\_{\\text{target}} - p\_{\\text{baseline}}, \\quad
+\\Delta\_{\\text{control}} = p\_{\\text{control}} - p\_{\\text{baseline}}
 $$
 
 $$
-ext{Specificity Score} = \\Delta\_{target} - \\Delta\_{control}
+\\mathrm{Specificity\\ Score} = \\Delta\_{\\text{target}} - \\Delta\_{\\text{control}}
 $$
 
 - Positive specificity suggests the target feature has a stronger causal effect
@@ -41,3 +41,9 @@ $$
 - Intervention outputs are stored per run in
   `results/experiments/<run_id>/intervention_results.csv` and summarized in the
   executive report pipeline.
+
+## Code Entry Points
+
+- Intervention core: `src/brain_surgery/intervention.py` -> `SAEIntervention`
+- Next-token scoring: `src/brain_surgery/intervention.py` -> `compare_next_token_logprobs(...)`
+- Q6 phase runner: `scripts/verify_pilot.py` -> `run_phase_q6(...)`

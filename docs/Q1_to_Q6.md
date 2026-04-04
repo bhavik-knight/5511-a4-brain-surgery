@@ -37,7 +37,7 @@ Train a sparse latent model that reconstructs hidden activations while reducing
 feature superposition.
 
 $$
-\\mathcal{L} = \\text{MSE}(x, \\hat{x}) + \\lambda \\lVert z \\rVert_1
+\\mathcal{L} = \\operatorname{MSE}(x, \\hat{x}) + \\lambda \\lVert z \\rVert_1
 $$
 
 ### Audit Summary

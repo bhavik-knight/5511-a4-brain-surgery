@@ -1,0 +1,98 @@
+{
+  "selected_k": 8,
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "cluster_size": 136,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 136
+      }
+    },
+    {
+      "cluster_id": 1,
+      "cluster_size": 337,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 337
+      }
+    },
+    {
+      "cluster_id": 2,
+      "cluster_size": 278,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 278
+      }
+    },
+    {
+      "cluster_id": 3,
+      "cluster_size": 1689,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 1689
+      }
+    },
+    {
+      "cluster_id": 4,
+      "cluster_size": 267,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 267
+      }
+    },
+    {
+      "cluster_id": 5,
+      "cluster_size": 234,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 234
+      }
+    },
+    {
+      "cluster_id": 6,
+      "cluster_size": 288,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 288
+      }
+    },
+    {
+      "cluster_id": 7,
+      "cluster_size": 355,
+      "dominant_category": "unknown",
+      "cluster_theme": "Tactical",
+      "category_purity": 1.0,
+      "average_feature_purity": 0.0,
+      "category_votes": {
+        "unknown": 355
+      }
+    }
+  ],
+  "theme_summary": {
+    "Tactical": 8,
+    "Historical": 0,
+    "Clubs": 0
+  }
+}

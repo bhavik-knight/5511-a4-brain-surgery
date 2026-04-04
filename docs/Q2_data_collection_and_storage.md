@@ -29,3 +29,9 @@ by the quality and traceability of this mapping.
 
 Q2 is complete, and the dataset format now supports downstream clustering
 validation and intervention analysis.
+
+## Code Entry Points
+
+- Module: `src/brain_surgery/data_gen.py`
+- Dataset builder: `DataGenerator.generate_dataset(...)`
+- Corpus source: `data/corpus/curated_soccer_prompts_1100.ndjson`

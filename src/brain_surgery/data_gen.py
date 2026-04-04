@@ -12,7 +12,7 @@ from typing import Protocol, TypedDict
 import torch
 from torch import Tensor
 
-from .utils import ACTIVATIONS_DIR, ensure_dir_exists
+from .utils import ACTIVATIONS_DIR, CORPUS_DIR, ensure_dir_exists
 
 type MetadataValue = int | str | list[str] | None
 type MetadataRow = dict[str, MetadataValue]
@@ -139,12 +139,7 @@ class DataGenerator:
                 FileNotFoundError: If the corpus file is missing.
                 ValueError: If the corpus file exists but contains no prompts.
         """
-        corpus_path = (
-            Path(__file__).resolve().parents[2]
-            / "data"
-            / "corpus"
-            / "curated_soccer_prompts_1100.ndjson"
-        )
+        corpus_path = CORPUS_DIR / "curated_soccer_prompts_1100.ndjson"
         if not corpus_path.exists():
             raise FileNotFoundError(
                 "Missing corpus file at "
