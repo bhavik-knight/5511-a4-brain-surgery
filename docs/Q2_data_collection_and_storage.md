@@ -10,7 +10,7 @@ by the quality and traceability of this mapping.
 
 ## Implementation
 
-- Uses a curated NDJSON corpus (`data/corpus/curated_soccer_prompts_1100.ndjson`)
+- Uses a curated NDJSON corpus (`data/corpus/soccer_prompts.ndjson`)
   with structured fields such as category, topic, and prompt text.
 - Validates every NDJSON record and rejects malformed lines early.
 - Runs prompts through the hooked model to collect per-token activation rows.
@@ -34,4 +34,4 @@ validation and intervention analysis.
 
 - Module: `src/brain_surgery/data_gen.py`
 - Dataset builder: `DataGenerator.generate_dataset(...)`
-- Corpus source: `data/corpus/curated_soccer_prompts_1100.ndjson`
+- Corpus source: `data/corpus/soccer_prompts.ndjson`

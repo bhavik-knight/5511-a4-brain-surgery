@@ -141,12 +141,12 @@ class DataGenerator:
                 FileNotFoundError: If the corpus file is missing.
                 ValueError: If the corpus file exists but contains no prompts.
         """
-        corpus_path = CORPUS_DIR / "curated_soccer_prompts_1100.ndjson"
+        corpus_path = CORPUS_DIR / "soccer_prompts.ndjson"
         if not corpus_path.exists():
             raise FileNotFoundError(
                 "Missing corpus file at "
                 f"{corpus_path}. Create it as NDJSON with fields "
-                "prompt, category, subcategory, topic, tags, era, and region."
+                "id and prompt (other fields like category are optional)."
             )
 
         records: list[PromptRecord] = []
