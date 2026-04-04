@@ -127,6 +127,37 @@ def _parse_args() -> argparse.Namespace:
         default=DEFAULT_ELBOW_MAX_K,
         help="Maximum k for elbow sweep.",
     )
+    parser.add_argument(
+        "--target-feature",
+        type=int,
+        default=1625,
+        help="Latent feature index to clamp for Q6 target intervention.",
+    )
+    parser.add_argument(
+        "--control-feature",
+        type=int,
+        default=0,
+        help="Latent feature index used as Q6 control intervention.",
+    )
+    parser.add_argument(
+        "--clamp-value",
+        type=float,
+        default=8.0,
+        help="Clamp multiplier applied to feature max value for Q6.",
+    )
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default="Who is the better football player, Ronaldo or Messi?",
+        help="Prompt used for Q6 intervention scoring.",
+    )
+    parser.add_argument(
+        "--candidate-tokens",
+        type=str,
+        nargs="+",
+        default=["Ronaldo", "Messi", "football", "goal"],
+        help="Candidate next tokens scored during Q6 intervention.",
+    )
     return parser.parse_args()
 
 
@@ -528,6 +559,11 @@ def run_phase_q6(
     model_wrapper: ModelWrapper,
     *,
     checkpoint_path: Path,
+    prompt: str = "Who is the better football player, Ronaldo or Messi?",
+    candidate_tokens: list[str] | None = None,
+    target_feature_index: int = 1625,
+    control_feature_index: int = 0,
+    clamp_multiplier: float = 8.0,
     intervention_csv_path: Path | None = None,
 ) -> tuple[dict[str, float], dict[str, float], dict[str, float], SAEIntervention]:
     """Run Ronaldo intervention and print baseline vs clamped deltas for Q6."""
@@ -543,8 +579,8 @@ def run_phase_q6(
         raise RuntimeError("Interpreter activation_matrix is missing after load().")
     intervention.compute_feature_max_values(interpreter.activation_matrix)
 
-    prompt = "Who is the better football player, Ronaldo or Messi?"
-    candidate_tokens = ["Ronaldo", "Messi", "football", "goal"]
+    if candidate_tokens is None:
+        candidate_tokens = ["Ronaldo", "Messi", "football", "goal"]
 
     baseline = intervention.compare_next_token_logprobs(
         prompt,
@@ -553,14 +589,14 @@ def run_phase_q6(
     clamped_target = intervention.compare_next_token_logprobs(
         prompt,
         candidate_tokens,
-        feature_index=1625,
-        clamp_multiplier=8.0,
+        feature_index=target_feature_index,
+        clamp_multiplier=clamp_multiplier,
     )
     clamped_control = intervention.compare_next_token_logprobs(
         prompt,
         candidate_tokens,
-        feature_index=0,
-        clamp_multiplier=8.0,
+        feature_index=control_feature_index,
+        clamp_multiplier=clamp_multiplier,
     )
 
     print(f"Prompt: {prompt}")
@@ -798,6 +834,11 @@ def main() -> None:
         interpreter,
         model_wrapper,
         checkpoint_path=checkpoint_path,
+        prompt=args.prompt,
+        candidate_tokens=args.candidate_tokens,
+        target_feature_index=args.target_feature,
+        control_feature_index=args.control_feature,
+        clamp_multiplier=args.clamp_value,
         intervention_csv_path=intervention_csv_path,
     )
 
