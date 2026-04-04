@@ -12,12 +12,11 @@ from brain_surgery.model_wrapper import ModelWrapper, get_default_device
 from conftest import FakeCausalLM, FakeTokenizer
 
 
-def test_default_layer_uses_midpoint_for_24_layers(
+def test_default_layer_uses_14_for_a100_optimized(
     mock_model_wrapper_24: ModelWrapper,
 ) -> None:
-    """Verify the default hook index is midpoint for a 24-layer model."""
-    assert mock_model_wrapper_24.total_layers == 24
-    assert mock_model_wrapper_24.layer_idx == 12
+    """Verify the default hook index is 14 for A100 optimized runs."""
+    assert mock_model_wrapper_24.layer_idx == 14
 
 
 def test_activations_shape_and_cpu_default(
@@ -67,10 +66,10 @@ def test_save_activations_roundtrip(
         file_stem="sample",
     )
 
-    payload = torch.load(out_path, map_location="cpu")
+    payload = torch.load(out_path, map_location="cpu", weights_only=True)
     assert isinstance(payload["token_ids"], torch.Tensor)
     assert isinstance(payload["activations"], torch.Tensor)
-    assert payload["layer_idx"] == 12
+    assert payload["layer_idx"] == 14
     assert payload["activations"].shape[1] == 896
 
 
@@ -93,7 +92,7 @@ def test_repr_contains_key_fields(mock_model_wrapper_24: ModelWrapper) -> None:
     """Verify repr includes model name and configured layer index."""
     text = repr(mock_model_wrapper_24)
     assert "ModelWrapper" in text
-    assert "layer_idx=12" in text
+    assert "layer_idx=14" in text
 
 
 def test_get_default_device_returns_torch_device() -> None:
@@ -321,7 +320,7 @@ def test_save_activations_keep_device_branch(tmp_path: Path) -> None:
         device="keep",
         gitignore_if_large=False,
     )
-    payload = torch.load(out)
+    payload = torch.load(out, weights_only=True)
     assert isinstance(payload["activations"], torch.Tensor)
 
 

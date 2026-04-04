@@ -197,7 +197,9 @@ class SAETrainer:
                 - TrainingSummary with dead neuron fraction and best loss
         """
         if self._should_resume():
-            checkpoint = torch.load(self.checkpoint_path, map_location="cpu")
+            checkpoint = torch.load(
+                self.checkpoint_path, map_location="cpu", weights_only=True
+            )
             self.model.load_state_dict(checkpoint["model_state_dict"])
             self.model.to(self.device)
             print("Loaded SAE checkpoint for resume.")

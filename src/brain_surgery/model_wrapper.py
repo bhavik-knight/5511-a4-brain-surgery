@@ -139,15 +139,15 @@ class ModelWrapper:
             self.activation_device = activation_device
 
         # Load model and tokenizer from local disk (offline).
-        # Use FP16 + device_map='auto' on CUDA for VRAM efficiency.
-        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        # Use BFLOAT16 + device_map='auto' on CUDA for A100 VRAM efficiency.
+        torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
         self.model: PreTrainedModel = cast(
             PreTrainedModel,
             AutoModelForCausalLM.from_pretrained(
                 str(model_dir),
                 local_files_only=True,
                 device_map="auto",
-                dtype=torch_dtype,
+                torch_dtype=torch_dtype,
             ),
         )
         self.tokenizer: PreTrainedTokenizer = cast(
@@ -174,10 +174,9 @@ class ModelWrapper:
 
         # Register hooks on the target layer
         if self.layer_idx is None:
-            self.layer_idx = self.total_layers // 2
+            self.layer_idx = DEFAULT_LAYER_IDX
             print(
-                "Defaulting to layer "
-                f"{self.layer_idx} (midpoint of {self.total_layers} layers)"
+                f"Defaulting to layer {self.layer_idx} (optimized for A100/Qwen-2.5-7B)"
             )
 
         if self.layer_idx < 0:
@@ -303,14 +302,11 @@ class ModelWrapper:
                 # Others return just the tensor
                 hidden_states = output_data
 
-            # Store activations on the requested device.
+            # Store activations on CPU immediately to preserve VRAM for A100.
             # During generation, the model is called multiple times (often with
             # seq_len=1 after the first step). We accumulate steps and stitch
             # them into a single (batch, seq_len, hidden_dim) tensor later.
-            stored = hidden_states.detach()
-            if stored.device != self.activation_device:
-                stored = stored.to(self.activation_device)
-
+            stored = hidden_states.detach().cpu()
             if stored.dim() == 2:
                 stored = stored.unsqueeze(0)
 
