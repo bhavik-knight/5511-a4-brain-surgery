@@ -265,3 +265,118 @@ class SAEInterpreter:
             )
 
         return results
+
+    def export_feature_census(
+        self,
+        *,
+        output_path: Path,
+        k: int = 5000,
+        density_threshold: float = 0.2,
+        soccer_keywords: list[str] | None = None,
+    ) -> None:
+        """Export a comprehensive census of filtered and ranked features to CSV.
+
+        Analyzes latents to find the top K features based on max activation,
+        filtering out dense/generic features. Tags features as soccer-related
+        based on their top activating tokens.
+
+        Args:
+            output_path: CSV file destination.
+            k: Max number of features to export.
+            density_threshold: Max fraction of tokens a feature can activate on
+                before being considered 'too dense' (e.g. 0.2 = 20%).
+            soccer_keywords: Optional list of strings for keyword tagging.
+
+        Raises:
+            RuntimeError: If compute_latents() not called first.
+        """
+        import csv
+
+        if self.latents is None or self.metadata is None:
+            raise RuntimeError("Call compute_latents() before export_feature_census().")
+
+        if soccer_keywords is None:
+            soccer_keywords = ["Messi", "Ronaldo", "goal", "pitch", "striker", "club"]
+
+        soccer_keywords_lower = [kw.lower() for kw in soccer_keywords]
+
+        print(f"Calculating feature statistics for {self.latents.shape[1]} features...")
+
+        # Vectorized calculations for efficiency
+        max_vals, _ = torch.max(self.latents, dim=0)
+        avg_vals = torch.mean(self.latents, dim=0)
+
+        # Count non-zero activations to calculate density
+        densities = (self.latents > 0).float().mean(dim=0)
+
+        # Filter by density
+        sparse_mask = densities <= density_threshold
+        sparse_indices = sparse_mask.nonzero(as_tuple=True)[0]
+
+        if len(sparse_indices) == 0:
+            print("No sparse features found matching the threshold.")
+            return
+
+        # Rank sparse features by max activation
+        sparse_max_vals = max_vals[sparse_indices]
+        top_k = min(k, len(sparse_indices))
+        top_k_sparse_vals, top_k_local_indices = torch.topk(sparse_max_vals, k=top_k)
+
+        # Map back to global feature indices
+        final_feature_indices = sparse_indices[top_k_local_indices].tolist()
+
+        print(
+            f"Exporting top {len(final_feature_indices)} sparse features "
+            f"to {output_path}..."
+        )
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "feature_id",
+                    "max_val",
+                    "avg_val",
+                    "density",
+                    "top_tokens",
+                    "is_soccer_related",
+                ],
+            )
+            writer.writeheader()
+
+            for idx, feat_idx in enumerate(final_feature_indices):
+                # Get stats
+                m_val = float(max_vals[feat_idx])
+                a_val = float(avg_vals[feat_idx])
+                d_val = float(densities[feat_idx])
+
+                # Get top tokens
+                top_examples = self.get_top_examples_for_feature(feat_idx, top_k=10)
+                tok_texts = [str(ex["token_text"]) for ex in top_examples]
+                top_tokens_str = " | ".join(tok_texts)
+
+                # Keyword tagging
+                is_soccer = any(
+                    any(kw in tok.lower() for kw in soccer_keywords_lower)
+                    for tok in tok_texts
+                )
+
+                writer.writerow(
+                    {
+                        "feature_id": int(feat_idx),
+                        "max_val": f"{m_val:.6f}",
+                        "avg_val": f"{a_val:.6f}",
+                        "density": f"{d_val:.6f}",
+                        "top_tokens": top_tokens_str,
+                        "is_soccer_related": is_soccer,
+                    }
+                )
+
+                if (idx + 1) % 500 == 0:
+                    print(
+                        f"  Processed {idx + 1}/{len(final_feature_indices)} "
+                        "features..."
+                    )
+
+        print(f"Feature census saved successfully: {output_path}")

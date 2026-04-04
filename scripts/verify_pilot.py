@@ -140,6 +140,7 @@ def run_phase_q4_q5(
     elbow_json_path: Path | None = None,
     elbow_plot_path: Path | None = None,
     cluster_report_json_path: Path | None = None,
+    global_census_csv_path: Path | None = None,
 ) -> None:
     """Run feature interpretation and clustering summary for Q4/Q5."""
     _print_header("Phase 1: Q4/Q5 Interpretability Check")
@@ -182,6 +183,14 @@ def run_phase_q4_q5(
 
     if top_features_csv_path is not None:
         _save_top_features_csv(top_feature_rows, top_features_csv_path)
+
+    if global_census_csv_path is not None:
+        print("\nPhase 1b: Global Feature Census (k=5000)")
+        interpreter.export_feature_census(
+            output_path=global_census_csv_path,
+            k=5000,
+            density_threshold=0.2,
+        )
 
     if interpreter.latents is None:
         raise RuntimeError("Interpreter latents missing. Call compute_latents() first.")
@@ -747,6 +756,7 @@ def main() -> None:
     cluster_report_json_path = run_dirs["experiment_root"] / "cluster_report.json"
     intervention_csv_path = run_dirs["experiment_root"] / "intervention_results.csv"
     metadata_json_path = run_dirs["experiment_root"] / "metadata.json"
+    global_census_csv_path = run_dirs["features_run"] / "global_feature_census.csv"
 
     _print_header("Pilot Verification Report")
     print(f"Run ID:     {run_id}")
@@ -774,6 +784,7 @@ def main() -> None:
         elbow_json_path=elbow_json_path,
         elbow_plot_path=elbow_plot_path,
         cluster_report_json_path=cluster_report_json_path,
+        global_census_csv_path=global_census_csv_path,
     )
 
     model_wrapper = ModelWrapper(model_name=DEFAULT_MODEL_NAME, layer_idx=12)
