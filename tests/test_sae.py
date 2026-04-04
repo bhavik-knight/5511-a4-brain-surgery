@@ -1,7 +1,5 @@
 """Unit tests for SparseAutoencoder and SAE loss behavior."""
 
-from __future__ import annotations
-
 import torch
 
 from brain_surgery.sae import SparseAutoencoder

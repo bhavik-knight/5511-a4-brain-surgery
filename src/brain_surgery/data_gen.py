@@ -4,8 +4,6 @@ This module implements Q2 activation collection by running a fixed prompt
 corpus through a ModelWrapper and saving token-aligned activations.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 

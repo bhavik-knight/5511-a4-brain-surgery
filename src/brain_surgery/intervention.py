@@ -4,8 +4,6 @@ Implements feature intervention by clamping specific latent features
 to test causal effects on model behavior.
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from pathlib import Path
 from typing import cast

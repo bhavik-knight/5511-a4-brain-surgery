@@ -1,7 +1,5 @@
 """Unit tests for brain_surgery.main interactive bootstrap."""
 
-from __future__ import annotations
-
 import runpy
 import sys
 from types import ModuleType

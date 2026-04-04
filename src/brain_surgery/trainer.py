@@ -4,8 +4,6 @@ Handles the training process including loss computation, optimization,
 and early stopping based on validation loss plateau.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from importlib import import_module
 import os
@@ -20,7 +18,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
 from .sae import SparseAutoencoder
-from .utils import MODELS_DIR
+from .utils import CHECKPOINTS_DIR, RESULTS_DIR
 
 _wandb: ModuleType | None
 try:
@@ -98,12 +96,16 @@ class SAETrainer:
         self.device = device or torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        self.checkpoint_path = checkpoint_path or (MODELS_DIR / "sae_checkpoint.pt")
+        self.checkpoint_path = checkpoint_path or (
+            CHECKPOINTS_DIR / "sae_checkpoint.pt"
+        )
         self.use_wandb = use_wandb
         self.wandb_project = wandb_project
         self.wandb_run_name = wandb_run_name
         self.use_tensorboard = use_tensorboard
-        self.tensorboard_log_dir = tensorboard_log_dir or Path("runs")
+        self.tensorboard_log_dir = tensorboard_log_dir or (
+            RESULTS_DIR / "logs" / "tensorboard"
+        )
 
         self.model.to(self.device)
         self.optimizer = torch.optim.Adam(

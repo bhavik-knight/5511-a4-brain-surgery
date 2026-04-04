@@ -1,10 +1,7 @@
 """Unit tests for ModelWrapper layer/default-hook behavior and activations."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from types import SimpleNamespace
-import sys
 
 import pytest
 import torch
@@ -400,19 +397,6 @@ def test_generate_decode_list_and_token_str_single_string(
     )
     assert text == "decoded-list"
     assert mock_model_wrapper_24._last_token_strs == ["tok"]  # noqa: SLF001
-
-
-def test_get_default_device_directml_branch(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify DirectML fallback branch when CUDA is unavailable."""
-    fake_module = SimpleNamespace(
-        is_available=lambda: True,
-        device=lambda: torch.device("cpu"),
-    )
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    monkeypatch.setitem(sys.modules, "torch_directml", fake_module)
-
-    device = get_default_device()
-    assert isinstance(device, torch.device)
 
 
 def test_total_layers_error_paths(mock_model_wrapper_24: ModelWrapper) -> None:

@@ -1,11 +1,10 @@
 """Shared pytest fixtures for the brain_surgery test suite."""
 
-from __future__ import annotations
-
 import sys
 from collections.abc import Generator
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Self
 
 import pytest
 import torch
@@ -94,7 +93,7 @@ class FakeCausalLM(nn.Module):
     def device(self) -> torch.device:
         return self._dummy.device
 
-    def eval(self) -> FakeCausalLM:
+    def eval(self) -> Self:
         return self
 
     def forward(

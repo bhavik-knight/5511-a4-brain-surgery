@@ -4,8 +4,6 @@ Provides methods to identify and analyze which inputs activate
 specific latent features, enabling feature interpretation.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import torch

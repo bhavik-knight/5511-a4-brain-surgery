@@ -1,7 +1,5 @@
 """Unit tests for SAETrainer training loop and resume decisions."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

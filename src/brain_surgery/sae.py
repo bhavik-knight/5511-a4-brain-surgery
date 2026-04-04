@@ -4,8 +4,6 @@ Implements a sparse autoencoder with tied encoder-decoder weights,
 ReLU activation, and L1 sparsity penalty for interpretable feature learning.
 """
 
-from __future__ import annotations
-
 from typing import TypedDict
 
 import torch

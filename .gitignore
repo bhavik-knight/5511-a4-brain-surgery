@@ -233,6 +233,12 @@ logs/*
 *.pt
 *.bin
 
+# Result artifact policy: keep structured reports, ignore heavy tensors/checkpoints.
+results/**/*.pt
+results/**/*.bin
+!results/**/*.json
+!results/**/*.csv
+
 # Keep folder structure for generated data
 data/activations/*
 !data/activations/.gitkeep

@@ -4,8 +4,6 @@ Groups learned latent features into conceptual neighborhoods to discover
 semantic patterns and feature relationships in the latent space.
 """
 
-from __future__ import annotations
-
 from typing import TypedDict
 
 import numpy as np

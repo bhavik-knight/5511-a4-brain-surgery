@@ -18,6 +18,7 @@ Typical usage:
     >>> print(f"Recommended layer: {recommended}")  # Output: 12
 """
 
+from datetime import datetime
 from pathlib import Path
 
 import torch
@@ -47,6 +48,10 @@ ACTIVATIONS_DIR: Path = DATA_DIR / "activations"
 FEATURES_DIR: Path = RESULTS_DIR / "features"
 METRICS_DIR: Path = RESULTS_DIR / "metrics"
 EXPERIMENTS_DIR: Path = RESULTS_DIR / "experiments"
+CHECKPOINTS_DIR: Path = RESULTS_DIR / "checkpoints"
+CLUSTERS_DIR: Path = RESULTS_DIR / "clusters"
+INTERVENTIONS_DIR: Path = RESULTS_DIR / "interventions"
+PLOTS_DIR: Path = RESULTS_DIR / "plots"
 
 # Create all necessary directories on module import
 _DIRS_TO_CREATE = [
@@ -58,7 +63,13 @@ _DIRS_TO_CREATE = [
     FEATURES_DIR,
     METRICS_DIR,
     EXPERIMENTS_DIR,
+    CHECKPOINTS_DIR,
+    CLUSTERS_DIR,
+    INTERVENTIONS_DIR,
+    PLOTS_DIR,
 ]
+
+type RunDirs = dict[str, Path]
 
 
 def ensure_dir_exists(directory: Path) -> Path:
@@ -81,6 +92,41 @@ def ensure_dir_exists(directory: Path) -> Path:
 # Initialize all project directories
 for _dir in _DIRS_TO_CREATE:
     ensure_dir_exists(_dir)
+
+
+def generate_run_id() -> str:
+    """Generate a timestamped run identifier.
+
+    Returns:
+        Run id formatted as ``run_YYYYMMDD_HHMM``.
+    """
+    return datetime.now().strftime("run_%Y%m%d_%H%M")
+
+
+def create_run_output_dirs(run_id: str) -> RunDirs:
+    """Create a run-scoped output hierarchy under results/.
+
+    Args:
+        run_id: Unique run identifier (for example ``run_20260403_2030``).
+
+    Returns:
+        Dictionary of created paths with keys:
+            - ``root``
+            - ``checkpoints``
+            - ``clusters``
+            - ``interventions``
+            - ``plots``
+            - ``logs``
+    """
+    run_root = ensure_dir_exists(RESULTS_DIR / run_id)
+    return {
+        "root": run_root,
+        "checkpoints": ensure_dir_exists(run_root / "checkpoints"),
+        "clusters": ensure_dir_exists(run_root / "clusters"),
+        "interventions": ensure_dir_exists(run_root / "interventions"),
+        "plots": ensure_dir_exists(run_root / "plots"),
+        "logs": ensure_dir_exists(run_root / "logs"),
+    }
 
 
 def get_device() -> torch.device:

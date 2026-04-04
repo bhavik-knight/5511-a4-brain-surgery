@@ -1,8 +1,7 @@
 """Headless university-cluster training entrypoint for SAE experiments."""
 
-from __future__ import annotations
-
 import argparse
+import json
 import traceback
 from datetime import datetime, UTC
 from pathlib import Path
@@ -12,6 +11,7 @@ from dotenv import load_dotenv
 
 from brain_surgery.sae import SparseAutoencoder
 from brain_surgery.trainer import SAETrainer
+from brain_surgery.utils import ACTIVATIONS_DIR, create_run_output_dirs, generate_run_id
 
 load_dotenv()
 
@@ -29,13 +29,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("data/activations/soccer_activations_dataset.pt"),
+        default=ACTIVATIONS_DIR / "soccer_activations_dataset.pt",
         help="Path to .pt dataset containing activation_matrix.",
     )
     parser.add_argument(
         "--checkpoint",
         type=Path,
-        default=Path("models/sae_checkpoint.pt"),
+        default=None,
         help="Checkpoint path for resume/save.",
     )
     parser.add_argument("--epochs", type=int, default=5, help="Training epochs.")
@@ -78,13 +78,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tensorboard-dir",
         type=Path,
-        default=Path("runs"),
+        default=None,
         help="TensorBoard log directory.",
+    )
+    parser.add_argument(
+        "--run-id",
+        type=str,
+        default=None,
+        help="Optional run id. If omitted, generates run_YYYYMMDD_HHMM.",
     )
     return parser.parse_args()
 
 
-def log_crash(exc: BaseException, log_path: Path = Path("crash_report.log")) -> None:
+def log_crash(exc: BaseException, log_path: Path) -> None:
     """Append crash details to crash_report.log.
 
     Args:
@@ -102,6 +108,16 @@ def log_crash(exc: BaseException, log_path: Path = Path("crash_report.log")) -> 
 def main() -> None:
     """Run headless SAE training for university cluster execution."""
     args = parse_args()
+    run_id = args.run_id or generate_run_id()
+    run_dirs = create_run_output_dirs(run_id)
+    checkpoint_path = args.checkpoint or (run_dirs["checkpoints"] / "sae_checkpoint.pt")
+    tensorboard_dir = args.tensorboard_dir or (run_dirs["logs"] / "tensorboard")
+    crash_log_path = run_dirs["logs"] / "crash_report.log"
+
+    print(f"Run ID: {run_id}")
+    print(f"Run dir: {run_dirs['root']}")
+    print(f"Checkpoint output: {checkpoint_path}")
+    print(f"TensorBoard dir: {tensorboard_dir}")
 
     try:
         payload = torch.load(args.dataset, map_location="cpu")
@@ -115,16 +131,32 @@ def main() -> None:
             num_epochs=args.epochs,
             l1_lambda=args.l1,
             patience=args.patience,
-            checkpoint_path=args.checkpoint,
+            checkpoint_path=checkpoint_path,
             auto_resume=args.resume,
             use_wandb=not args.no_wandb,
             wandb_project=args.wandb_project,
             wandb_run_name=args.wandb_run_name,
             use_tensorboard=True,
-            tensorboard_log_dir=args.tensorboard_dir,
+            tensorboard_log_dir=tensorboard_dir,
         )
 
         _, summary = trainer.train(activation_matrix)
+        summary_path = run_dirs["root"] / "training_summary.json"
+        with summary_path.open("w", encoding="utf-8") as fh:
+            json.dump(
+                {
+                    "run_id": run_id,
+                    "dataset": str(args.dataset),
+                    "checkpoint": str(checkpoint_path),
+                    "epochs": summary.epochs,
+                    "final_loss": summary.final_loss,
+                    "dead_neuron_fraction": summary.dead_neuron_fraction,
+                    "best_loss": summary.best_loss,
+                },
+                fh,
+                indent=2,
+            )
+        print(f"Saved training summary: {summary_path}")
         print(
             "Training complete: "
             f"epochs={summary.epochs}, "
@@ -133,13 +165,13 @@ def main() -> None:
         )
 
     except torch.cuda.OutOfMemoryError as exc:
-        log_crash(exc)
-        print("CUDA OOM encountered. Details saved to crash_report.log")
+        log_crash(exc, crash_log_path)
+        print(f"CUDA OOM encountered. Details saved to {crash_log_path}")
         raise
     except RuntimeError as exc:
         if "out of memory" in str(exc).lower():
-            log_crash(exc)
-            print("Runtime OOM encountered. Details saved to crash_report.log")
+            log_crash(exc, crash_log_path)
+            print(f"Runtime OOM encountered. Details saved to {crash_log_path}")
         raise
 
 

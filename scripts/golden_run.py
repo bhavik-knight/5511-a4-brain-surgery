@@ -1,7 +1,5 @@
 """Orchestrate the golden activation dataset run."""
 
-from __future__ import annotations
-
 import torch
 
 from brain_surgery.clustering import cluster_features_kmeans, print_cluster_analysis
@@ -13,9 +11,9 @@ from brain_surgery.sae import SparseAutoencoder
 from brain_surgery.trainer import SAETrainer
 from brain_surgery.utils import (
     ACTIVATIONS_DIR,
+    CHECKPOINTS_DIR,
     DEFAULT_MODEL_NAME,
     METRICS_DIR,
-    MODELS_DIR,
     ensure_dir_exists,
 )
 
@@ -46,7 +44,7 @@ def main() -> None:
         num_epochs=3,
         l1_lambda=1e-3,
         patience=5,
-        checkpoint_path=MODELS_DIR / "sae_checkpoint.pt",
+        checkpoint_path=CHECKPOINTS_DIR / "sae_checkpoint.pt",
     )
     history, train_summary = trainer.train(activation_matrix)
     print(
@@ -57,8 +55,8 @@ def main() -> None:
     )
 
     ensure_dir_exists(METRICS_DIR)
-    ensure_dir_exists(MODELS_DIR)
-    checkpoint_path = MODELS_DIR / "sae_checkpoint.pt"
+    ensure_dir_exists(CHECKPOINTS_DIR)
+    checkpoint_path = CHECKPOINTS_DIR / "sae_checkpoint.pt"
     torch.save(sae.state_dict_for_checkpoint(), checkpoint_path)
     print(f"Saved SAE checkpoint: {checkpoint_path}")
 

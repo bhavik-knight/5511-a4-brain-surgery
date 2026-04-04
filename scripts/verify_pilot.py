@@ -4,22 +4,34 @@ Run with:
     uv run scripts/verify_pilot.py
 """
 
-from __future__ import annotations
-
+import argparse
+import csv
+import json
 from pathlib import Path
+from collections import Counter
 
 import numpy as np
 import torch
 from sklearn.cluster import DBSCAN, KMeans
+from sklearn.neighbors import NearestNeighbors
 
 from brain_surgery.clustering import cluster_features_kmeans
 from brain_surgery.interpret import SAEInterpreter
 from brain_surgery.intervention import SAEIntervention
 from brain_surgery.model_wrapper import ModelWrapper
-from brain_surgery.utils import DEFAULT_MODEL_NAME, ROOT_DIR
+from brain_surgery.utils import (
+    ACTIVATIONS_DIR,
+    CHECKPOINTS_DIR,
+    DEFAULT_MODEL_NAME,
+    create_run_output_dirs,
+    generate_run_id,
+)
 
-DEFAULT_CHECKPOINT = ROOT_DIR / "models" / "sae_checkpoint.pt"
-DEFAULT_DATASET = ROOT_DIR / "data" / "activations" / "soccer_activations_dataset.pt"
+DEFAULT_CHECKPOINT = CHECKPOINTS_DIR / "sae_checkpoint.pt"
+DEFAULT_DATASET = ACTIVATIONS_DIR / "soccer_activations_dataset.pt"
+DEFAULT_ELBOW_START_K = 4
+DEFAULT_ELBOW_STEP = 4
+DEFAULT_ELBOW_MAX_K = 40
 
 
 def _print_header(title: str) -> None:
@@ -52,7 +64,59 @@ def _safe_token_text(value: object) -> str:
     return str(value)
 
 
-def run_phase_q4_q5(interpreter: SAEInterpreter) -> None:
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run pilot verification with run-scoped output artifacts.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=DEFAULT_CHECKPOINT,
+        help="Path to SAE checkpoint (.pt).",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=Path,
+        default=DEFAULT_DATASET,
+        help="Path to activation dataset (.pt).",
+    )
+    parser.add_argument(
+        "--run-id",
+        type=str,
+        default=None,
+        help="Optional run id. If omitted, generates run_YYYYMMDD_HHMM.",
+    )
+    parser.add_argument(
+        "--elbow-start-k",
+        type=int,
+        default=DEFAULT_ELBOW_START_K,
+        help="Starting k for elbow sweep.",
+    )
+    parser.add_argument(
+        "--elbow-step",
+        type=int,
+        default=DEFAULT_ELBOW_STEP,
+        help="Step size for elbow sweep.",
+    )
+    parser.add_argument(
+        "--elbow-max-k",
+        type=int,
+        default=DEFAULT_ELBOW_MAX_K,
+        help="Maximum k for elbow sweep.",
+    )
+    return parser.parse_args()
+
+
+def run_phase_q4_q5(
+    interpreter: SAEInterpreter,
+    *,
+    elbow_start_k: int = DEFAULT_ELBOW_START_K,
+    elbow_step: int = DEFAULT_ELBOW_STEP,
+    elbow_max_k: int = DEFAULT_ELBOW_MAX_K,
+    elbow_csv_path: Path | None = None,
+    dbscan_json_path: Path | None = None,
+) -> None:
     """Run feature interpretation and clustering summary for Q4/Q5."""
     _print_header("Phase 1: Q4/Q5 Interpretability Check")
 
@@ -87,11 +151,25 @@ def run_phase_q4_q5(interpreter: SAEInterpreter) -> None:
         raise RuntimeError("Interpreter latents missing. Call compute_latents() first.")
 
     feature_profiles = interpreter.latents.T.cpu().numpy()
-    _print_elbow_table(feature_profiles)
-    _print_dbscan_summary(feature_profiles)
+    best_k, elbow_rows = _print_elbow_table(
+        feature_profiles,
+        start_k=elbow_start_k,
+        step=elbow_step,
+        max_k=elbow_max_k,
+    )
+    if elbow_csv_path is not None:
+        _save_elbow_table_csv(elbow_rows, elbow_csv_path)
 
-    clustering = cluster_features_kmeans(interpreter, num_clusters=10, random_state=42)
-    print("\nK-Means cluster summary (10 clusters):")
+    dbscan_summary = _print_dbscan_summary(interpreter, feature_profiles, best_k)
+    if dbscan_json_path is not None:
+        _save_dbscan_summary_json(dbscan_summary, dbscan_json_path)
+
+    clustering = cluster_features_kmeans(
+        interpreter,
+        num_clusters=best_k,
+        random_state=42,
+    )
+    print(f"\nK-Means cluster summary ({best_k} clusters):")
     for summary in clustering["cluster_summaries"]:
         cluster_id = summary["cluster_id"]
         num_features = summary["num_features"]
@@ -103,36 +181,155 @@ def run_phase_q4_q5(interpreter: SAEInterpreter) -> None:
         )
 
 
-def _print_elbow_table(feature_profiles: np.ndarray) -> None:
-    """Print SSE for k in [2, 20] as an elbow-method diagnostic table."""
-    print("\nElbow diagnostics (K-Means SSE):")
+def _print_elbow_table(
+    feature_profiles: np.ndarray,
+    *,
+    start_k: int,
+    step: int,
+    max_k: int,
+) -> tuple[int, list[tuple[int, float]]]:
+    """Print SSE sweep and return automatically selected elbow k."""
+    if step <= 0:
+        raise ValueError(f"step must be positive, got {step}")
+    if start_k <= 1:
+        raise ValueError(f"start_k must be >=2, got {start_k}")
+    if max_k < start_k:
+        raise ValueError(f"max_k must be >= start_k, got {max_k} < {start_k}")
+
+    print("\nElbow diagnostics (K-Means SSE sweep):")
+    print(f"  start_k={start_k}, step={step}, max_k={max_k}")
     print("  k | inertia (SSE)")
     print("  --+----------------")
-    for k in range(2, 21):
+    k_values = list(range(start_k, max_k + 1, step))
+    inertias: list[float] = []
+    for k in k_values:
         model = KMeans(n_clusters=k, random_state=42, n_init=10)
         model.fit(feature_profiles)
-        print(f"  {k:2d} | {model.inertia_:14.4f}")
+        inertia = float(model.inertia_)
+        inertias.append(inertia)
+        print(f"  {k:3d} | {inertia:14.4f}")
+
+    # Elbow heuristic: pick the point with max perpendicular distance to
+    # the line connecting first and last SSE points.
+    x = np.asarray(k_values, dtype=np.float64)
+    y = np.asarray(inertias, dtype=np.float64)
+    x1, y1 = x[0], y[0]
+    x2, y2 = x[-1], y[-1]
+    denominator = np.hypot(y2 - y1, x2 - x1)
+    if denominator == 0:
+        best_k = k_values[0]
+    else:
+        distances = np.abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
+        distances = distances / denominator
+        best_idx = int(np.argmax(distances))
+        best_k = int(k_values[best_idx])
+
+    print(f"\nEstimated elbow k: {best_k}")
+    elbow_rows = list(zip(k_values, inertias))
+    return best_k, elbow_rows
 
 
-def _print_dbscan_summary(feature_profiles: np.ndarray) -> None:
-    """Run DBSCAN and print density/noise summary as a secondary pass."""
+def _save_elbow_table_csv(rows: list[tuple[int, float]], csv_path: Path) -> None:
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["k", "inertia_sse"])
+        for k, inertia in rows:
+            writer.writerow([k, f"{inertia:.6f}"])
+    print(f"Saved elbow table CSV: {csv_path}")
+
+
+def _print_dbscan_summary(
+    interpreter: SAEInterpreter,
+    feature_profiles: np.ndarray,
+    elbow_k: int,
+) -> dict[str, object]:
+    """Run DBSCAN, tuned from elbow_k, and print top-cluster token summaries."""
     print("\nDBSCAN secondary pass:")
-    dbscan = DBSCAN(eps=0.5, min_samples=5)
+
+    n_samples = feature_profiles.shape[0]
+    if n_samples < 2:
+        print("  Not enough features to run DBSCAN.")
+        return {
+            "elbow_k": elbow_k,
+            "eps": None,
+            "clusters_found": 0,
+            "noise_features": 0,
+            "top_clusters": [],
+        }
+
+    n_neighbors = max(2, min(elbow_k, n_samples - 1))
+    neighbors = NearestNeighbors(n_neighbors=n_neighbors)
+    neighbors.fit(feature_profiles)
+    distances, _ = neighbors.kneighbors(feature_profiles)
+    eps = float(np.percentile(distances[:, -1], 90))
+
+    dbscan = DBSCAN(eps=eps, min_samples=5)
     labels = dbscan.fit_predict(feature_profiles)
 
     noise_count = int(np.sum(labels == -1))
     unique_labels = sorted(int(label) for label in np.unique(labels) if label != -1)
-    print(f"  clusters_found={len(unique_labels)} | noise_features={noise_count}")
+    print(
+        "  "
+        f"clusters_found={len(unique_labels)} | "
+        f"noise_features={noise_count} | "
+        f"eps={eps:.6f} | tuned_from_elbow_k={elbow_k}"
+    )
+    top_clusters: list[dict[str, object]] = []
     if unique_labels:
-        counts = [int(np.sum(labels == label)) for label in unique_labels]
-        print(f"  cluster_sizes={counts}")
+        cluster_sizes = [
+            (label, int(np.sum(labels == label))) for label in unique_labels
+        ]
+        cluster_sizes.sort(key=lambda item: item[1], reverse=True)
+
+        print("\n  Top 10 DBSCAN clusters with 10 representative tokens:")
+        print("  cluster | size | tokens")
+        print("  --------+------+-----------------------------------------------")
+        for label, size in cluster_sizes[:10]:
+            feature_indices = np.where(labels == label)[0].tolist()
+            token_counter: Counter[str] = Counter()
+            for feature_index in feature_indices:
+                examples = interpreter.get_top_examples_for_feature(
+                    feature_index=feature_index,
+                    top_k=10,
+                )
+                for item in examples:
+                    token_text = _safe_token_text(item.get("token_text")).strip()
+                    if token_text:
+                        token_counter[token_text] += 1
+            top_tokens = [token for token, _ in token_counter.most_common(10)]
+            top_clusters.append(
+                {
+                    "cluster_id": int(label),
+                    "size": int(size),
+                    "top_tokens": top_tokens,
+                }
+            )
+            print(f"  {label:7d} | {size:4d} | {' | '.join(top_tokens)}")
     else:
         print("  No dense DBSCAN clusters found with current hyperparameters.")
+
+    return {
+        "elbow_k": int(elbow_k),
+        "eps": float(eps),
+        "clusters_found": int(len(unique_labels)),
+        "noise_features": int(noise_count),
+        "top_clusters": top_clusters,
+    }
+
+
+def _save_dbscan_summary_json(summary: dict[str, object], json_path: Path) -> None:
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    with json_path.open("w", encoding="utf-8") as fh:
+        json.dump(summary, fh, indent=2)
+    print(f"Saved DBSCAN summary JSON: {json_path}")
 
 
 def run_phase_q6(
     interpreter: SAEInterpreter,
     model_wrapper: ModelWrapper,
+    *,
+    intervention_csv_path: Path | None = None,
 ) -> tuple[dict[str, float], dict[str, float], dict[str, float], SAEIntervention]:
     """Run Ronaldo intervention and print baseline vs clamped deltas for Q6."""
     _print_header("Phase 2: Q6 Ronaldo Intervention")
@@ -169,16 +366,35 @@ def run_phase_q6(
 
     print(f"Prompt: {prompt}")
     print("Token log-prob deltas (target feature vs control feature):")
+    rows: list[dict[str, object]] = []
     for token in candidate_tokens:
         base = baseline.get(token)
         target = clamped_target.get(token)
         control = clamped_control.get(token)
         if base is None or target is None or control is None:
             print(f"  {token:8s}: not-scored (likely multi-token under tokenizer)")
+            rows.append(
+                {
+                    "token": token,
+                    "baseline": None,
+                    "target_delta": None,
+                    "control_delta": None,
+                    "specificity": None,
+                }
+            )
             continue
         target_delta = target - base
         control_delta = control - base
         specificity = target_delta - control_delta
+        rows.append(
+            {
+                "token": token,
+                "baseline": float(base),
+                "target_delta": float(target_delta),
+                "control_delta": float(control_delta),
+                "specificity": float(specificity),
+            }
+        )
         print(
             f"  {token:8s}: baseline={base:+.6f} | "
             f"target_delta={target_delta:+.6f} | "
@@ -186,7 +402,27 @@ def run_phase_q6(
             f"specificity={specificity:+.6f}"
         )
 
+    if intervention_csv_path is not None:
+        _save_intervention_csv(rows, intervention_csv_path)
+
     return baseline, clamped_target, clamped_control, intervention
+
+
+def _save_intervention_csv(rows: list[dict[str, object]], csv_path: Path) -> None:
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        fieldnames = [
+            "token",
+            "baseline",
+            "target_delta",
+            "control_delta",
+            "specificity",
+        ]
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    print(f"Saved intervention deltas CSV: {csv_path}")
 
 
 def run_dtype_audit(
@@ -250,10 +486,18 @@ def run_dtype_audit(
 
 def main() -> None:
     """Run full pilot verification report for Q4/Q5/Q6."""
-    checkpoint_path = DEFAULT_CHECKPOINT
-    dataset_path = DEFAULT_DATASET
+    args = _parse_args()
+    checkpoint_path = args.checkpoint
+    dataset_path = args.dataset
+    run_id = args.run_id or generate_run_id()
+    run_dirs = create_run_output_dirs(run_id)
+    elbow_csv_path = run_dirs["clusters"] / "elbow_sse.csv"
+    dbscan_json_path = run_dirs["clusters"] / "dbscan_summary.json"
+    intervention_csv_path = run_dirs["interventions"] / "logprob_deltas.csv"
 
     _print_header("Pilot Verification Report")
+    print(f"Run ID:     {run_id}")
+    print(f"Run dir:    {run_dirs['root']}")
     print(f"Checkpoint: {checkpoint_path}")
     print(f"Dataset:    {dataset_path}")
     print(f"Model dir:  {DEFAULT_MODEL_NAME}")
@@ -268,10 +512,21 @@ def main() -> None:
     interpreter.load()
     interpreter.compute_latents()
 
-    run_phase_q4_q5(interpreter)
+    run_phase_q4_q5(
+        interpreter,
+        elbow_start_k=args.elbow_start_k,
+        elbow_step=args.elbow_step,
+        elbow_max_k=args.elbow_max_k,
+        elbow_csv_path=elbow_csv_path,
+        dbscan_json_path=dbscan_json_path,
+    )
 
     model_wrapper = ModelWrapper(model_name=DEFAULT_MODEL_NAME, layer_idx=12)
-    _, _, _, intervention = run_phase_q6(interpreter, model_wrapper)
+    _, _, _, intervention = run_phase_q6(
+        interpreter,
+        model_wrapper,
+        intervention_csv_path=intervention_csv_path,
+    )
 
     run_dtype_audit(interpreter, model_wrapper, intervention)
 

@@ -15,8 +15,6 @@ Typical usage:
     >>> print(f"Activations shape: {activations.shape}")
 """
 
-from __future__ import annotations
-
 # ruff: noqa: ANN101
 
 from pathlib import Path
@@ -49,29 +47,21 @@ type ActivationPayloadValue = str | int | Tensor | list[str] | None
 
 
 def get_default_device() -> torch.device:
-    """Get appropriate device with priority: CUDA > DirectML > CPU.
+    """Get appropriate device with priority: CUDA > CPU.
 
     Detects the best available device for computation on the current system,
-    with fallback hierarchy: NVIDIA CUDA → Windows DirectML → CPU.
+    with fallback hierarchy: NVIDIA CUDA → CPU.
 
     Returns:
-        Device object for torch operations (cuda, directml, or cpu).
+        Device object for torch operations (cuda or cpu).
 
     Example:
         >>> device = get_default_device()
         >>> print(f"Using device: {device}")
-        Using device: cuda  # or directml / cpu
+        Using device: cuda  # or cpu
     """
     if torch.cuda.is_available():
         return torch.device("cuda")
-
-    try:
-        import torch_directml
-
-        if torch_directml.is_available():
-            return torch_directml.device()
-    except ImportError:
-        pass
 
     return torch.device("cpu")
 
@@ -88,7 +78,7 @@ class ModelWrapper:
         layer_idx: Index of the transformer layer to hook (0-indexed).
         model: The loaded pre-trained language model.
         tokenizer: The tokenizer for the model.
-        device: Device on which the model runs (cuda, directml, or cpu).
+        device: Device on which the model runs (cuda or cpu).
         activations: Dictionary storing captured activations by layer.
         hooks: List of registered hook handles for cleanup.
 
