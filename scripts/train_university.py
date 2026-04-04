@@ -3,6 +3,7 @@
 import argparse
 import json
 import traceback
+from collections.abc import Sequence
 from datetime import datetime, UTC
 from pathlib import Path
 
@@ -87,6 +88,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional run id. If omitted, generates run_YYYYMMDD_HHMM.",
     )
+    parser.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="Run 1 epoch on first 5 prompts to verify environment.",
+    )
     return parser.parse_args()
 
 
@@ -105,30 +111,71 @@ def log_crash(exc: BaseException, log_path: Path) -> None:
         fh.write("\n" + "-" * 80 + "\n")
 
 
+def _subset_activation_matrix_for_smoke(payload: dict[str, object]) -> torch.Tensor:
+    """Extract a 5-prompt activation subset from dataset payload for smoke tests."""
+    activation_matrix_obj = payload.get("activation_matrix")
+    if not isinstance(activation_matrix_obj, torch.Tensor):
+        raise ValueError("Dataset payload missing activation_matrix tensor.")
+
+    metadata_obj = payload.get("metadata")
+    if not isinstance(metadata_obj, Sequence):
+        return activation_matrix_obj[: min(256, activation_matrix_obj.shape[0])]
+
+    selected_prompt_ids: set[int] = set()
+    selected_rows: list[int] = []
+    for idx, row in enumerate(metadata_obj):
+        if not isinstance(row, dict):
+            continue
+        prompt_id = row.get("prompt_id")
+        if not isinstance(prompt_id, int):
+            continue
+        if prompt_id not in selected_prompt_ids and len(selected_prompt_ids) >= 5:
+            continue
+        selected_prompt_ids.add(prompt_id)
+        selected_rows.append(idx)
+
+    if not selected_rows:
+        return activation_matrix_obj[: min(256, activation_matrix_obj.shape[0])]
+
+    index_tensor = torch.tensor(selected_rows, dtype=torch.long)
+    return activation_matrix_obj.index_select(0, index_tensor)
+
+
 def main() -> None:
     """Run headless SAE training for university cluster execution."""
     args = parse_args()
     run_id = args.run_id or generate_run_id()
     run_dirs = create_run_output_dirs(run_id)
-    checkpoint_path = args.checkpoint or (run_dirs["checkpoints"] / "sae_checkpoint.pt")
+    checkpoint_path = args.checkpoint or (run_dirs["checkpoints"] / "sae_best.pt")
     tensorboard_dir = args.tensorboard_dir or (run_dirs["logs"] / "tensorboard")
+    wandb_dir = run_dirs["logs"] / "wandb"
     crash_log_path = run_dirs["logs"] / "crash_report.log"
 
     print(f"Run ID: {run_id}")
     print(f"Run dir: {run_dirs['root']}")
     print(f"Checkpoint output: {checkpoint_path}")
     print(f"TensorBoard dir: {tensorboard_dir}")
+    print(f"WandB dir: {wandb_dir}")
 
     try:
         payload = torch.load(args.dataset, map_location="cpu")
         activation_matrix = payload["activation_matrix"]
+        run_epochs = args.epochs
+
+        if args.smoke_test:
+            activation_matrix = _subset_activation_matrix_for_smoke(payload)
+            run_epochs = 1
+            print(
+                "Smoke test active: running 1 epoch on subset with "
+                f"{activation_matrix.shape[0]} token rows (from first 5 prompts)."
+            )
 
         model = SparseAutoencoder(input_dim=896, latent_dim=3584)
         trainer = SAETrainer(
             model=model,
             learning_rate=args.lr,
             batch_size=args.batch_size,
-            num_epochs=args.epochs,
+            num_epochs=run_epochs,
             l1_lambda=args.l1,
             patience=args.patience,
             checkpoint_path=checkpoint_path,
@@ -136,6 +183,7 @@ def main() -> None:
             use_wandb=not args.no_wandb,
             wandb_project=args.wandb_project,
             wandb_run_name=args.wandb_run_name,
+            wandb_dir=wandb_dir,
             use_tensorboard=True,
             tensorboard_log_dir=tensorboard_dir,
         )
@@ -148,6 +196,7 @@ def main() -> None:
                     "run_id": run_id,
                     "dataset": str(args.dataset),
                     "checkpoint": str(checkpoint_path),
+                    "smoke_test": bool(args.smoke_test),
                     "loss_history": history,
                     "epochs": summary.epochs,
                     "final_loss": summary.final_loss,

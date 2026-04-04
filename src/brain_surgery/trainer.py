@@ -62,6 +62,7 @@ class SAETrainer:
         use_wandb: bool = True,
         wandb_project: str = "a4-brain-surgery",
         wandb_run_name: str | None = None,
+        wandb_dir: Path | None = None,
         use_tensorboard: bool = True,
         tensorboard_log_dir: Path | None = None,
     ) -> None:
@@ -83,6 +84,7 @@ class SAETrainer:
             use_wandb: Whether to enable WandB logging.
             wandb_project: WandB project name.
             wandb_run_name: Optional WandB run name.
+            wandb_dir: Optional local directory for WandB run files.
             use_tensorboard: Whether to enable TensorBoard logging.
             tensorboard_log_dir: Optional TensorBoard log directory.
         """
@@ -102,10 +104,15 @@ class SAETrainer:
         self.use_wandb = use_wandb
         self.wandb_project = wandb_project
         self.wandb_run_name = wandb_run_name
+        self.wandb_dir = wandb_dir
         self.use_tensorboard = use_tensorboard
         self.tensorboard_log_dir = tensorboard_log_dir or (
             RESULTS_DIR / "logs" / "tensorboard"
         )
+
+        checkpoint_dir = self.checkpoint_path.parent
+        self.best_checkpoint_path = checkpoint_dir / "sae_best.pt"
+        self.final_checkpoint_path = checkpoint_dir / "sae_final.pt"
 
         self.model.to(self.device)
         self.optimizer = torch.optim.Adam(
@@ -127,10 +134,15 @@ class SAETrainer:
             init_fn = getattr(self._wandb, "init", None)
             if callable(init_fn):
                 cast_init_fn = cast(Callable[..., object], init_fn)
+                wandb_dir_str: str | None = None
+                if self.wandb_dir is not None:
+                    self.wandb_dir.mkdir(parents=True, exist_ok=True)
+                    wandb_dir_str = str(self.wandb_dir)
                 self._wandb_run = cast_init_fn(
                     project=project,
                     entity=entity,
                     name=self.wandb_run_name,
+                    dir=wandb_dir_str,
                     config={
                         "lr": self.learning_rate,
                         "l1_coeff": self.l1_lambda,
@@ -287,6 +299,11 @@ class SAETrainer:
             if epoch_loss < best_loss:
                 best_loss = epoch_loss
                 patience_counter = 0
+                self.best_checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+                torch.save(
+                    self.model.state_dict_for_checkpoint(),
+                    self.best_checkpoint_path,
+                )
             else:
                 patience_counter += 1
                 if patience_counter >= self.patience:
@@ -304,7 +321,12 @@ class SAETrainer:
         )
 
         self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self.model.state_dict_for_checkpoint(), self.checkpoint_path)
+        final_state = self.model.state_dict_for_checkpoint()
+        torch.save(final_state, self.final_checkpoint_path)
+        torch.save(final_state, self.checkpoint_path)
+
+        if not self.best_checkpoint_path.exists():
+            torch.save(final_state, self.best_checkpoint_path)
 
         if self._wandb_run is not None and self._wandb is not None:
             artifact_cls = getattr(self._wandb, "Artifact", None)

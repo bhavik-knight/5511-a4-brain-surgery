@@ -535,6 +535,7 @@ def _save_metadata_report(interpreter: SAEInterpreter, out_path: Path) -> bool:
 
     metadata = interpreter.metadata or []
     coverage: dict[str, int] = {field: 0 for field in required_fields}
+    category_counts: Counter[str] = Counter()
     for row in metadata:
         for field in required_fields:
             value = row.get(field)
@@ -544,6 +545,10 @@ def _save_metadata_report(interpreter: SAEInterpreter, out_path: Path) -> bool:
             elif value is not None:
                 coverage[field] += 1
 
+        category_value = row.get("category")
+        if isinstance(category_value, str) and category_value:
+            category_counts[category_value] += 1
+
     total_rows = len(metadata)
     all_present = all(count > 0 for count in coverage.values()) and total_rows > 0
 
@@ -552,6 +557,7 @@ def _save_metadata_report(interpreter: SAEInterpreter, out_path: Path) -> bool:
         "total_rows": total_rows,
         "required_fields": required_fields,
         "field_non_null_counts": coverage,
+        "category_activation_counts": dict(category_counts),
         "all_required_fields_present": all_present,
         "sample_rows": sample_rows,
     }
