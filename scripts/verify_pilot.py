@@ -750,13 +750,19 @@ def main() -> None:
     checkpoint_path = _resolve_checkpoint_path(args, run_id)
     dataset_path = args.dataset
     run_dirs = create_run_output_dirs(run_id)
-    top_features_csv_path = run_dirs["features_run"] / "top_10_features.csv"
-    elbow_json_path = run_dirs["metrics_root"] / "elbow_sweep.json"
-    elbow_plot_path = run_dirs["metrics_root"] / "elbow_plot.png"
-    cluster_report_json_path = run_dirs["experiment_root"] / "cluster_report.json"
-    intervention_csv_path = run_dirs["experiment_root"] / "intervention_results.csv"
-    metadata_json_path = run_dirs["experiment_root"] / "metadata.json"
-    global_census_csv_path = run_dirs["features_run"] / "global_feature_census.csv"
+    top_features_csv_path = run_dirs["features_run"] / f"top_10_features_{run_id}.csv"
+    elbow_json_path = run_dirs["metrics_root"] / f"elbow_sweep_{run_id}.json"
+    elbow_plot_path = run_dirs["metrics_root"] / f"elbow_plot_{run_id}.png"
+    cluster_report_json_path = (
+        run_dirs["experiment_root"] / f"cluster_report_{run_id}.json"
+    )
+    intervention_csv_path = (
+        run_dirs["experiment_root"] / f"intervention_results_{run_id}.csv"
+    )
+    metadata_json_path = run_dirs["experiment_root"] / f"metadata_{run_id}.json"
+    global_census_csv_path = (
+        run_dirs["features_run"] / f"global_feature_census_{run_id}.csv"
+    )
 
     _print_header("Pilot Verification Report")
     print(f"Run ID:     {run_id}")
