@@ -20,7 +20,11 @@ from verify_pilot import (
 )
 from brain_surgery.interpret import SAEInterpreter
 from brain_surgery.model_wrapper import ModelWrapper
-from brain_surgery.utils import DEFAULT_MODEL_NAME
+from brain_surgery.utils import (
+    DEFAULT_MODEL_NAME,
+    create_run_output_dirs,
+    generate_run_id,
+)
 
 EXPERIMENT_ELBOW_START_K = 10
 EXPERIMENT_ELBOW_STEP = 5
@@ -31,6 +35,8 @@ def main() -> None:
     """Run pilot verification with experimental elbow sweep settings."""
     checkpoint_path = DEFAULT_CHECKPOINT
     dataset_path = DEFAULT_DATASET
+    run_id = generate_run_id()
+    run_dirs = create_run_output_dirs(f"experiment_{run_id}")
 
     _print_header("Pilot Verification Report (Experiment)")
     print(f"Checkpoint: {checkpoint_path}")
@@ -63,7 +69,12 @@ def main() -> None:
     model_wrapper = ModelWrapper(model_name=DEFAULT_MODEL_NAME, layer_idx=12)
     _, _, _, intervention = run_phase_q6(interpreter, model_wrapper)
 
-    run_dtype_audit(interpreter, model_wrapper, intervention)
+    run_dtype_audit(
+        interpreter,
+        model_wrapper,
+        intervention,
+        metadata_json_path=run_dirs["root"] / "metadata.json",
+    )
 
     _print_header("Experiment Verification Complete")
     print("All experiment checks completed successfully.")

@@ -51,13 +51,21 @@ class FakeTokenizer:
         return {"input_ids": [token_to_id.get(token, 99)]}
 
     def decode(self, token_ids: object, skip_special_tokens: bool = True) -> str:
+        _ = skip_special_tokens
         if isinstance(token_ids, torch.Tensor):
             token_ids = token_ids.tolist()
-        if isinstance(token_ids, list) and token_ids and isinstance(token_ids[0], list):
-            token_ids = token_ids[0]
+
+        normalized_ids: list[int] = []
         if isinstance(token_ids, int):
-            token_ids = [token_ids]
-        return " ".join(f"tok{tid}" for tid in token_ids)
+            normalized_ids = [token_ids]
+        elif isinstance(token_ids, list):
+            if token_ids and isinstance(token_ids[0], list):
+                nested = token_ids[0]
+                normalized_ids = [int(tid) for tid in nested if isinstance(tid, int)]
+            else:
+                normalized_ids = [int(tid) for tid in token_ids if isinstance(tid, int)]
+
+        return " ".join(f"tok{tid}" for tid in normalized_ids)
 
     def convert_ids_to_tokens(self, token_ids: list[int]) -> list[str]:
         return [f"tok{tid}" for tid in token_ids]

@@ -429,8 +429,10 @@ def run_dtype_audit(
     interpreter: SAEInterpreter,
     model_wrapper: ModelWrapper,
     intervention: SAEIntervention,
+    *,
+    metadata_json_path: Path,
 ) -> None:
-    """Print dtype audit report and confirm float16/float32 compatibility."""
+    """Print dtype audit and confirm rich metadata report export."""
     _print_header("Phase 3: Dtype Audit")
 
     allowed = {torch.float16, torch.float32}
@@ -481,7 +483,54 @@ def run_dtype_audit(
     if not all_ok:
         raise RuntimeError("Dtype audit failed: found non-float16/float32 tensors.")
 
+    metadata_ok = _save_metadata_report(interpreter, metadata_json_path)
+    if not metadata_ok:
+        raise RuntimeError(
+            "Metadata audit failed: required rich metadata fields are missing."
+        )
+
     print("\nDtype audit passed: all checked tensors are float16 or float32.")
+
+
+def _save_metadata_report(interpreter: SAEInterpreter, out_path: Path) -> bool:
+    """Save metadata audit report and validate rich schema fields."""
+    required_fields = [
+        "category",
+        "subcategory",
+        "topic",
+        "tags",
+        "era",
+        "region",
+    ]
+
+    metadata = interpreter.metadata or []
+    coverage: dict[str, int] = {field: 0 for field in required_fields}
+    for row in metadata:
+        for field in required_fields:
+            value = row.get(field)
+            if field == "tags":
+                if isinstance(value, list):
+                    coverage[field] += 1
+            elif value is not None:
+                coverage[field] += 1
+
+    total_rows = len(metadata)
+    all_present = all(count > 0 for count in coverage.values()) and total_rows > 0
+
+    sample_rows = metadata[:10]
+    payload = {
+        "total_rows": total_rows,
+        "required_fields": required_fields,
+        "field_non_null_counts": coverage,
+        "all_required_fields_present": all_present,
+        "sample_rows": sample_rows,
+    }
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
+    print(f"Saved metadata audit JSON: {out_path}")
+    return all_present
 
 
 def main() -> None:
@@ -494,6 +543,7 @@ def main() -> None:
     elbow_csv_path = run_dirs["clusters"] / "elbow_sse.csv"
     dbscan_json_path = run_dirs["clusters"] / "dbscan_summary.json"
     intervention_csv_path = run_dirs["interventions"] / "logprob_deltas.csv"
+    metadata_json_path = run_dirs["root"] / "metadata.json"
 
     _print_header("Pilot Verification Report")
     print(f"Run ID:     {run_id}")
@@ -528,7 +578,12 @@ def main() -> None:
         intervention_csv_path=intervention_csv_path,
     )
 
-    run_dtype_audit(interpreter, model_wrapper, intervention)
+    run_dtype_audit(
+        interpreter,
+        model_wrapper,
+        intervention,
+        metadata_json_path=metadata_json_path,
+    )
 
     _print_header("Verification Complete")
     print("All requested pilot checks completed successfully.")

@@ -4,17 +4,77 @@ This module implements Q2 activation collection by running a fixed prompt
 corpus through a ModelWrapper and saving token-aligned activations.
 """
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, TypedDict
 
 import torch
 from torch import Tensor
 
-from .model_wrapper import ModelWrapper
 from .utils import ACTIVATIONS_DIR, ensure_dir_exists
 
-type MetadataValue = int | str
+type MetadataValue = int | str | list[str] | None
 type MetadataRow = dict[str, MetadataValue]
+
+
+class PromptRecord(TypedDict):
+    """Structured input prompt record loaded from NDJSON."""
+
+    category: str
+    subcategory: str
+    topic: str
+    tags: list[str]
+    era: str | None
+    region: str | None
+    prompt: str
+
+
+class ActivationWrapper(Protocol):
+    """Protocol for wrappers that can generate text and save activations."""
+
+    @property
+    def layer_idx(self) -> int | None:
+        """Transformer layer index used for hook capture."""
+        ...
+
+    @property
+    def _last_token_texts(self) -> list[str] | None:
+        """Most recent decoded token text list from generation."""
+        ...
+
+    @property
+    def _last_token_strs(self) -> list[str] | None:
+        """Most recent token strings aligned with token ids."""
+        ...
+
+    @property
+    def _last_output_ids(self) -> Tensor | None:
+        """Most recent generated token ids tensor."""
+        ...
+
+    @property
+    def _last_generated_text(self) -> str | None:
+        """Most recent generated text string."""
+        ...
+
+    def generate_with_activations(
+        self,
+        prompt: str,
+        **kwargs: object,
+    ) -> tuple[str, dict[str, Tensor]]:
+        """Generate text and return activation payloads."""
+        ...
+
+    def save_activations(
+        self,
+        *,
+        batch_idx: int,
+        file_stem: str,
+        save_dir: Path,
+    ) -> Path:
+        """Save activation artifact for a prompt batch item."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -44,7 +104,7 @@ class DataGenerator:
 
     def __init__(
         self,
-        wrapper: ModelWrapper,
+        wrapper: ActivationWrapper,
         *,
         batch_size: int = 4,
         max_new_tokens: int = 100,
@@ -69,11 +129,11 @@ class DataGenerator:
         self.temperature = temperature
         self.top_p = top_p
 
-    def load_corpus(self) -> list[str]:
-        """Load the soccer-domain prompt corpus from disk.
+    def load_corpus(self) -> list[PromptRecord]:
+        """Load the structured soccer-domain prompt corpus from NDJSON.
 
         Returns:
-                A list of prompt strings.
+                A list of prompt records with schema metadata.
 
         Raises:
                 FileNotFoundError: If the corpus file is missing.
@@ -83,28 +143,69 @@ class DataGenerator:
             Path(__file__).resolve().parents[2]
             / "data"
             / "corpus"
-            / "soccer_prompts.txt"
+            / "curated_soccer_prompts_1100.ndjson"
         )
         if not corpus_path.exists():
             raise FileNotFoundError(
                 "Missing corpus file at "
-                f"{corpus_path}. Create it with one prompt per line, "
-                "or run the setup step that generates "
-                "data/corpus/soccer_prompts.txt."
+                f"{corpus_path}. Create it as NDJSON with fields "
+                "prompt, category, subcategory, topic, tags, era, and region."
             )
 
-        prompts = [
-            line.strip()
-            for line in corpus_path.read_text(encoding="utf-8").splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-        if not prompts:
+        records: list[PromptRecord] = []
+        for line_no, raw_line in enumerate(
+            corpus_path.read_text(encoding="utf-8").splitlines(),
+            start=1,
+        ):
+            line = raw_line.strip()
+            if not line:
+                continue
+            data = json.loads(line)
+            if not isinstance(data, dict):
+                raise ValueError(f"Invalid NDJSON object at {corpus_path}:{line_no}")
+
+            prompt_obj = data.get("prompt")
+            if not isinstance(prompt_obj, str) or not prompt_obj.strip():
+                raise ValueError(f"Missing/invalid prompt at {corpus_path}:{line_no}")
+
+            tags_obj = data.get("tags")
+            tags: list[str]
+            if isinstance(tags_obj, list):
+                tags = [tag for tag in tags_obj if isinstance(tag, str)]
+            else:
+                tags = []
+
+            category_obj = data.get("category")
+            subcategory_obj = data.get("subcategory")
+            topic_obj = data.get("topic")
+            era_obj = data.get("era")
+            region_obj = data.get("region")
+
+            records.append(
+                {
+                    "category": category_obj
+                    if isinstance(category_obj, str)
+                    else "General",
+                    "subcategory": (
+                        subcategory_obj
+                        if isinstance(subcategory_obj, str)
+                        else "Legacy"
+                    ),
+                    "topic": topic_obj if isinstance(topic_obj, str) else "Mixed",
+                    "tags": tags,
+                    "era": era_obj if isinstance(era_obj, str) else None,
+                    "region": region_obj if isinstance(region_obj, str) else None,
+                    "prompt": prompt_obj.strip(),
+                }
+            )
+
+        if not records:
             raise ValueError(
                 f"Corpus file exists but is empty: {corpus_path}. "
-                "Populate it with one prompt per line."
+                "Populate it with NDJSON prompt records."
             )
 
-        return prompts
+        return records
 
     def generate_dataset(
         self,
@@ -119,19 +220,13 @@ class DataGenerator:
         Returns:
                 A tuple with activation matrix, metadata list, and summary statistics.
         """
-        prompts = self.load_corpus()
+        prompt_records = self.load_corpus()
         if prompt_limit is not None:
             if prompt_limit <= 0:
                 raise ValueError(
                     f"prompt_limit must be positive when provided, got {prompt_limit}"
                 )
-            prompts = prompts[:prompt_limit]
-        else:
-            if len(prompts) != 118:
-                raise ValueError(
-                    "Expected 118 prompts in corpus, got "
-                    f"{len(prompts)}. Update load_corpus() to match the plan."
-                )
+            prompt_records = prompt_records[:prompt_limit]
 
         ensure_dir_exists(ACTIVATIONS_DIR)
 
@@ -140,10 +235,11 @@ class DataGenerator:
         total_tokens = 0
         seq_lens: list[int] = []
 
-        for batch_start in range(0, len(prompts), self.batch_size):
-            batch = prompts[batch_start : batch_start + self.batch_size]
-            for idx, prompt in enumerate(batch):
+        for batch_start in range(0, len(prompt_records), self.batch_size):
+            batch = prompt_records[batch_start : batch_start + self.batch_size]
+            for idx, prompt_record in enumerate(batch):
                 prompt_id = batch_start + idx
+                prompt = prompt_record["prompt"]
                 _, activations = self.wrapper.generate_with_activations(
                     prompt=prompt,
                     max_tokens=self.max_new_tokens,
@@ -202,6 +298,12 @@ class DataGenerator:
                             "generated_text": generated_text,
                             "hook_layer_index": hook_layer_index,
                             "hook_layer_name": hook_layer_name,
+                            "category": prompt_record["category"],
+                            "subcategory": prompt_record["subcategory"],
+                            "topic": prompt_record["topic"],
+                            "tags": prompt_record["tags"],
+                            "era": prompt_record["era"],
+                            "region": prompt_record["region"],
                         }
                     )
 
@@ -221,19 +323,22 @@ class DataGenerator:
             {
                 "activation_matrix": activation_matrix,
                 "metadata": metadata,
-                "num_prompts": len(prompts),
+                "num_prompts": len(prompt_records),
                 "total_tokens": total_tokens,
                 "hidden_dim": activation_matrix.shape[1],
             },
             dataset_path,
         )
 
-        average_seq_len = total_tokens / len(prompts)
+        average_seq_len = total_tokens / len(prompt_records)
         summary = DatasetSummary(
-            num_prompts=len(prompts),
+            num_prompts=len(prompt_records),
             total_tokens=total_tokens,
             average_seq_len=average_seq_len,
-            activation_shape=tuple(activation_matrix.shape),
+            activation_shape=(
+                int(activation_matrix.shape[0]),
+                int(activation_matrix.shape[1]),
+            ),
         )
 
         return activation_matrix, metadata, summary

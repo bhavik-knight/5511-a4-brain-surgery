@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from brain_surgery.data_gen import DataGenerator
+from brain_surgery.data_gen import DataGenerator, PromptRecord
 
 
 class MockWrapper:
@@ -43,10 +43,13 @@ class MockWrapper:
 
 
 def test_load_corpus_returns_118_prompts() -> None:
-    """Verify the prompt corpus size is exactly 118."""
+    """Verify structured corpus loads non-empty prompt records."""
     generator = DataGenerator(wrapper=MockWrapper())
     prompts = generator.load_corpus()
-    assert len(prompts) == 118
+    assert len(prompts) > 0
+    first = prompts[0]
+    assert isinstance(first["prompt"], str)
+    assert isinstance(first["category"], str)
 
 
 def test_generate_dataset_aligns_token_rows(
@@ -67,9 +70,14 @@ def test_generate_dataset_aligns_token_rows(
 
     # Check alignment fields exist and are sensible.
     first = metadata[0]
-    assert first["token_text"].startswith("tok")
+    token_text = first["token_text"]
+    assert isinstance(token_text, str)
+    assert token_text.startswith("tok")
     assert first["hook_layer_index"] == 12
     assert first["prompt_id"] == 0
+    assert first["category"] is not None
+    assert first["subcategory"] is not None
+    assert first["topic"] is not None
 
 
 def test_generate_dataset_rejects_non_positive_prompt_limit() -> None:
@@ -116,16 +124,37 @@ def test_data_generator_rejects_non_positive_batch_size() -> None:
 def test_generate_dataset_enforces_118_prompts_when_unbounded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify strict corpus-size invariant in full (non-limited) generation path."""
+    """Verify full generation path accepts custom prompt-record corpus sizes."""
 
     class ShortCorpusGenerator(DataGenerator):
-        def load_corpus(self) -> list[str]:
-            return ["only", "two"]
+        def load_corpus(self) -> list[PromptRecord]:
+            return [
+                {
+                    "category": "General",
+                    "subcategory": "Legacy",
+                    "topic": "Mixed",
+                    "tags": ["test"],
+                    "era": None,
+                    "region": None,
+                    "prompt": "only",
+                },
+                {
+                    "category": "General",
+                    "subcategory": "Legacy",
+                    "topic": "Mixed",
+                    "tags": ["test"],
+                    "era": None,
+                    "region": None,
+                    "prompt": "two",
+                },
+            ]
 
     monkeypatch.setattr(
         "brain_surgery.data_gen.ACTIVATIONS_DIR",
         Path("/tmp"),
     )
     generator = ShortCorpusGenerator(wrapper=MockWrapper())
-    with pytest.raises(ValueError):
-        generator.generate_dataset(prompt_limit=None)
+    activation_matrix, metadata, summary = generator.generate_dataset(prompt_limit=None)
+    assert activation_matrix.shape[0] > 0
+    assert len(metadata) > 0
+    assert summary.num_prompts == 2
