@@ -3,6 +3,17 @@
 Sparse Autoencoder-based mechanistic interpretability project for small LLMs,
 with end-to-end run-scoped training, verification, and executive reporting.
 
+## Table of Contents
+
+- [Research Index](#research-index)
+- [Installation](#installation)
+- [Quick Start (Local Verification)](#quick-start-local-verification)
+- [Usage Guide](#usage-guide)
+- [What Is Finalized](#what-is-finalized)
+- [Development Notes](#development-notes)
+- [References](#references)
+- [License](#-license)
+
 ## Research Index
 
 - [Theory Framework](docs/THEORY.md)
@@ -32,6 +43,16 @@ Model weights (offline local directory expected at `models/qwen2.5-0.5b`):
 
 ```bash
 uv run hf download Qwen/Qwen2.5-0.5B --local-dir ./models/qwen2.5-0.5b
+```
+
+## Quick Start (Local Verification)
+
+Use this 3-command verification flow with a shared run id:
+
+```bash
+uv run python scripts/train_university.py --smoke-test --run-id run_YYYYMMDD_HHMM
+uv run python scripts/verify_pilot.py --run-id run_YYYYMMDD_HHMM
+uv run python scripts/generate_report.py --run-id run_YYYYMMDD_HHMM
 ```
 
 ## Usage Guide
@@ -83,6 +104,15 @@ This writes `executive_summary.json` in
 - Main scripts are designed for deterministic, run-id-based reproducibility.
 - Keep large artifacts in `data/` and `results/`; avoid committing generated
   binaries unless required for release snapshots.
+
+## References
+
+- Nikola Kriznar:
+  https://github.com/nkriznar/sparse-autoencoder-llm-interpretability
+- Miguel Angel Palafox Gomez (ter-kes):
+  https://github.com/ter-kes/sparse-autoencoder-llm-interpretability
+- Anthropic, Scaling Monosemanticity:
+  https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html
 
 ## 📝 License
 
