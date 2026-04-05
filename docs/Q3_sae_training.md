@@ -24,7 +24,7 @@ feature superposition.
 Objective:
 
 $$
-\mathcal{L} = \operatorname{MSE}(x, \hat{x}) + \lambda \lVert z \rVert_1
+\mathcal{L} = \mathrm{MSE}(x, \hat{x}) + \lambda \lVert z \rVert_1
 $$
 
 where reconstruction preserves information and $L_1$ regularization promotes
