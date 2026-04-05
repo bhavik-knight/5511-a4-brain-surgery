@@ -1,73 +1,54 @@
-# Q2 — Data Collection & Activation Storage
+# Q2 - Data Collection and Storage
 
-Implementation is in `src/brain_surgery/data_gen.py`.
+Implementation file: `src/brain_surgery/data_gen.py`
 
-## Storage Locations (Repo Convention)
+## Dataset Definition (Soccer Activations)
 
-- **Corpus data:** `data/corpus/`
-- **Captured activations (artifacts):** `data/activations/`
-  - Saved as `.pt` files via `ModelWrapper.save_activations()`.
-  - Each artifact is designed to be *token-aligned* (tokens ↔ activation rows).
+The SAE dataset is derived from internal model activations, not raw text.
 
-## Artifact Naming Convention
+- Corpus size: 170 curated soccer prompts.
+- Domain coverage: player biographies (Messi, Ronaldo), team tactics,
+  league history, and match rules.
+- Capture location: Layer 12 (0.5B Model) / 14 (7B Model) residual stream.
+- Storage tensor: $137557 \times d_{\mathrm{model}}$ in
+  `data/activations/soccer_activations_dataset.pt`.
 
-Activation artifacts are stored as `.pt` files under `data/activations/`.
+### Layer Rationale
 
-- **Default naming:** if you don’t pass `file_stem=...`, the wrapper uses a descriptive stem like:
-  - `layers_{layer_idx}_acts_batch_{batch_idx}.pt`
-- **Recommended naming (when running a corpus pipeline):** pass `file_stem=...` so filenames encode the run context.
-  - Suggested stem format:
-    - `{corpus}_{split}_layer{layer_idx}_shard{shard}_batch{batch_idx}`
-  - Example:
-    - `tinystories_train_layer4_shard00_batch0123.pt`
+Layer 12/14 is treated as a semantic sweet spot: syntax is already integrated,
+while token-level commitment is not yet fully finalized. This improves the
+quality of downstream feature interpretation and intervention studies.
 
-For non-activation outputs, follow the repo’s output folders:
+## Theoretical Goal
 
-- `results/metrics/` for JSON/CSV metrics and plots
-- `results/experiments/` for intervention/counterfactual outputs
-- `results/features/` for feature reports/snippets
+Create a trustworthy measurement dataset linking each token event to its hidden
+activation and semantic context. Mechanistic interpretability quality is bounded
+by the quality and traceability of this mapping.
 
-## Results File Naming (Recommended)
+## Implementation
 
-To keep handoff and grading simple, save machine-readable outputs with predictable filenames.
+- Uses a curated NDJSON corpus (`data/corpus/soccer_prompts.ndjson`)
+  with structured fields such as category, topic, and prompt text.
+- Validates every NDJSON record and rejects malformed lines early.
+- Runs prompts through the hooked model to collect per-token activation rows.
+- Stores activation matrix and metadata together in `.pt` payloads under
+  `data/activations/`.
+- Preserves category-rich metadata needed for later purity auditing and
+  category-level analysis in Q5.
 
-- **Corpus / data-collection stats** (Q2) → `results/metrics/`
+## NDJSON-Driven Pipeline Value
 
-  - Suggested filename:
-    - `corpus_stats_{corpus}_{split}.json`
-  - Example:
-    - `corpus_stats_tinystories_train.json`
+- Explicit schema prevents silent data drift.
+- Line-oriented records support easy dataset extension and auditing.
+- Rich metadata makes semantic interpretation falsifiable instead of anecdotal.
 
-- **SAE training metrics** (Q3) → `results/metrics/`
+## Current Status
 
-  - Suggested filename:
-    - `sae_metrics_{corpus}_{split}_layer{layer_idx}.json`
-  - Example:
-    - `sae_metrics_tinystories_train_layer4.json`
+Q2 is complete, and the dataset format now supports downstream clustering
+validation and intervention analysis.
 
-- **Intervention / counterfactual summaries** (Q6) → `results/experiments/`
+## Code Entry Points
 
-  - Suggested filename:
-    - `clamp_summary_{corpus}_{split}_layer{layer_idx}.json`
-  - Example:
-    - `clamp_summary_tinystories_valid_layer4.json`
-
-If you run multiple experimental settings, add a short suffix like `_v1`, `_topk50`, or a date stamp (e.g., `_2026-03-28`).
-
-## Expected Artifact Contents
-
-Activation artifacts written by `ModelWrapper.save_activations()` include:
-
-- `prompt`, `generated_text`
-- `token_ids`, `token_strs`, `token_texts`
-- `activations` (shape: `(seq_len, hidden_dim)`)
-
-## Results/Outputs
-
-Any corpus statistics (counts, shapes, sizes, timing) should be written under:
-
-- `results/metrics/`
-
-______________________________________________________________________
-
-This document can be expanded with the final pipeline description, batching strategy, and storage format details once Q2 is implemented.
+- Module: `src/brain_surgery/data_gen.py`
+- Dataset builder: `DataGenerator.generate_dataset(...)`
+- Corpus source: `data/corpus/soccer_prompts.ndjson`

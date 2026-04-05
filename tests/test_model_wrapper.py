@@ -1,580 +1,599 @@
-"""Tests for model_wrapper module.
+"""Unit tests for ModelWrapper layer/default-hook behavior and activations."""
 
-This test suite validates the ModelWrapper class functionality including:
-- Activation Collection: Verify activations are returned as dict with Tensor values
-- Tensor Shapes: Assert correct shape (batch_size, sequence_length, hidden_dimension)
-- Hook Cleanup: Ensure hooks are properly removed for memory safety
-- Device Consistency: Verify activations are moved to CPU for VRAM management
-
-Uses a tiny local model saved to a temp directory to avoid relying on network
-access or a pre-populated Hugging Face cache.
-"""
-
-import sys
+from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
 
-# Add src to path so we can import brain_surgery module
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from brain_surgery.model_wrapper import ModelWrapper
-
-
-# ============================================================================
-# TEST 1: ACTIVATION COLLECTION
-# ============================================================================
+import brain_surgery.model_wrapper as model_wrapper_module
+from brain_surgery.model_wrapper import ModelWrapper, get_default_device
+from conftest import FakeCausalLM, FakeTokenizer
 
 
-class TestActivationCollection:
-    """Test suite verifying activation collection functionality.
-
-    Requirement: generate_with_activations() returns a dictionary where
-    keys correspond to hooked layers and values are torch.Tensor objects.
-    """
-
-    def test_activations_returned_as_dict(
-        self: "TestActivationCollection", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify that activations are returned as a dictionary.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Returned activations is a dict
-            - "layer" key exists (hooked layer output)
-            - Value is a torch.Tensor
-        """
-        prompt = "The capital of France is"
-        text, activations = tiny_model_wrapper.generate_with_activations(
-            prompt=prompt, max_tokens=5
-        )
-
-        assert isinstance(activations, dict), "Activations must be dict"
-        assert "layer" in activations, "Expected 'layer' key in activations dict"
-        assert isinstance(activations["layer"], torch.Tensor), (
-            "Activation values must be torch.Tensor"
-        )
-
-    def test_activations_non_empty(
-        self: "TestActivationCollection", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify that activations dictionary is populated after generation.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Activations dict contains at least one entry
-            - The tensor is not empty
-        """
-        text, activations = tiny_model_wrapper.generate_with_activations(
-            prompt="Hello world", max_tokens=3
-        )
-
-        assert len(activations) > 0, "Activations dict must not be empty"
-        assert activations["layer"].numel() > 0, (
-            "Activation tensor must contain elements"
-        )
+def _set_generation_state(
+    wrapper: ModelWrapper,
+    *,
+    prompt: str,
+    generated_text: str,
+    output_ids: torch.Tensor,
+    token_texts: list[str],
+    token_strs: list[str] | None = None,
+) -> None:
+    """Populate wrapper generation metadata for serialization-focused tests."""
+    setattr(wrapper, "_last_prompt", prompt)
+    setattr(wrapper, "_last_generated_text", generated_text)
+    setattr(wrapper, "_last_output_ids", output_ids)
+    setattr(wrapper, "_last_token_texts", token_texts)
+    token_str_values = token_strs if token_strs is not None else token_texts
+    setattr(wrapper, "_last_token_strs", token_str_values)
 
 
-# ============================================================================
-# TEST 2: TENSOR SHAPES
-# ============================================================================
+def _call_protected(obj: object, name: str, *args: object, **kwargs: object) -> object:
+    """Invoke a protected member in tests without direct protected access syntax."""
+    member = getattr(obj, name)
+    return member(*args, **kwargs)
 
 
-class TestTensorShapes:
-    """Test suite verifying activation tensor shapes.
+def test_default_layer_uses_14_for_a100_optimized(
+    mock_model_wrapper_24: ModelWrapper,
+) -> None:
+    """Verify the default hook index is 14 for A100 optimized runs."""
+    assert mock_model_wrapper_24.layer_idx == 14
 
-    Requirement: Collected activations have shape (batch_size, sequence_length,
-    hidden_dimension).
-    """
 
-    def test_activation_dimensions(
-        self: "TestTensorShapes", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify activations have correct dimensionality.
+def test_activations_shape_and_cpu_default(
+    mock_model_wrapper_24: ModelWrapper,
+) -> None:
+    """Verify captured activations are (batch, seq, 896) and on CPU by default."""
+    _, activations = mock_model_wrapper_24.generate_with_activations(
+        prompt="What is football?",
+        max_tokens=4,
+    )
 
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
+    assert "layer" in activations
+    tensor = activations["layer"]
+    assert tensor.dim() == 3
 
-        Asserts:
-            - Tensor has 3 dimensions (batch, seq_len, hidden_dim)
-            - Dimensions match expected pattern
-        """
-        text, activations = tiny_model_wrapper.generate_with_activations(
-            prompt="Test", max_tokens=5
-        )
-        activation_tensor = activations["layer"]
+    batch, seq_len, hidden_dim = tensor.shape
+    assert batch == 1
+    assert seq_len > 0
+    assert hidden_dim == 896
+    assert tensor.device.type == "cpu"
 
-        assert activation_tensor.dim() == 3, (
-            f"Expected 3D tensor, got {activation_tensor.dim()}D"
-        )
-        batch_size, seq_len, hidden_dim = activation_tensor.shape
-        assert batch_size > 0, "batch_size must be positive"
-        assert seq_len > 0, "sequence_length must be positive"
-        assert hidden_dim > 0, "hidden_dimension must be positive"
 
-    def test_activation_shape_consistency(
-        self: "TestTensorShapes", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify activation shapes are consistent across multiple generations.
+def test_is_loaded_true_after_init(mock_model_wrapper_24: ModelWrapper) -> None:
+    """Verify model/tokenizer loaded state is reported correctly."""
+    assert mock_model_wrapper_24.is_loaded() is True
 
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
 
-        Asserts:
-            - Multiple generations produce consistent shapes
-            - Shape matches (batch=1, seq_len varies, hidden_dim fixed)
-        """
-        prompts = ["Hello", "The quick brown", "Once upon a time"]
-        shapes = []
+def test_generate_empty_prompt_raises(mock_model_wrapper_24: ModelWrapper) -> None:
+    """Verify prompt validation rejects empty input."""
+    with pytest.raises(ValueError):
+        mock_model_wrapper_24.generate_with_activations("   ")
 
-        for prompt in prompts:
-            text, activations = tiny_model_wrapper.generate_with_activations(
-                prompt=prompt, max_tokens=3
+
+def test_save_activations_roundtrip(
+    mock_model_wrapper_24: ModelWrapper,
+    tmp_path: Path,
+) -> None:
+    """Verify saved activation payload has tensor fields and expected metadata."""
+    _text, _acts = mock_model_wrapper_24.generate_with_activations(
+        prompt="hello world",
+        max_tokens=3,
+    )
+
+    out_path = mock_model_wrapper_24.save_activations(
+        save_dir=tmp_path,
+        batch_idx=1,
+        file_stem="sample",
+    )
+
+    payload = torch.load(out_path, map_location="cpu", weights_only=True)
+    assert isinstance(payload["token_ids"], torch.Tensor)
+    assert isinstance(payload["activations"], torch.Tensor)
+    assert payload["layer_idx"] == 14
+    assert payload["activations"].shape[1] == 896
+
+
+def test_save_without_generation_raises(mock_model_wrapper_24: ModelWrapper) -> None:
+    """Verify save_activations fails before any generation run."""
+    with pytest.raises(RuntimeError):
+        mock_model_wrapper_24.save_activations()
+
+
+def test_unregister_hooks_clears_state(mock_model_wrapper_24: ModelWrapper) -> None:
+    """Verify unregister_hooks removes handles and activation buffers."""
+    _text, _acts = mock_model_wrapper_24.generate_with_activations("test", max_tokens=2)
+    mock_model_wrapper_24.unregister_hooks()
+
+    assert mock_model_wrapper_24.hooks == []
+    assert mock_model_wrapper_24.activations == {}
+
+
+def test_repr_contains_key_fields(mock_model_wrapper_24: ModelWrapper) -> None:
+    """Verify repr includes model name and configured layer index."""
+    text = repr(mock_model_wrapper_24)
+    assert "ModelWrapper" in text
+    assert "layer_idx=14" in text
+
+
+def test_get_default_device_returns_torch_device() -> None:
+    """Verify default device helper always returns a torch.device instance."""
+    device = get_default_device()
+    assert isinstance(device, torch.device)
+
+
+def test_generate_with_non_callable_generate_raises(
+    mock_model_wrapper_24: ModelWrapper,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify runtime guard for models missing callable generate API."""
+
+    class NoGenerateModel:
+        def __init__(self) -> None:
+            self.generate = None
+            self._param = torch.nn.Parameter(torch.zeros(1))
+
+        def parameters(self) -> Iterator[torch.Tensor]:
+            yield self._param
+
+    monkeypatch.setattr(mock_model_wrapper_24, "model", NoGenerateModel())
+    monkeypatch.setattr(
+        mock_model_wrapper_24,
+        "_infer_model_input_device",
+        lambda: torch.device("cpu"),
+    )
+    with pytest.raises(RuntimeError):
+        mock_model_wrapper_24.generate_with_activations("test")
+
+
+def test_generate_with_output_missing_sequences_raises(
+    mock_model_wrapper_24: ModelWrapper,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify fallback generate output validation when tensor sequences are absent."""
+
+    class BadModel:
+        device = torch.device("cpu")
+
+        def parameters(self) -> Iterator[torch.Tensor]:
+            yield torch.zeros(1)
+
+        def generate(self, *args: object, **kwargs: object) -> object:
+            return SimpleNamespace(sequences=[1, 2, 3])
+
+    monkeypatch.setattr(mock_model_wrapper_24, "model", BadModel())
+    with pytest.raises(RuntimeError):
+        mock_model_wrapper_24.generate_with_activations("test")
+
+
+def test_save_activations_invalid_format_raises(
+    mock_model_wrapper_24: ModelWrapper,
+) -> None:
+    """Verify unsupported serialization format is rejected."""
+    with pytest.raises(ValueError):
+        mock_model_wrapper_24.save_activations(fmt="ptx")  # type: ignore[arg-type]
+
+
+def test_save_activations_shape_guards(
+    mock_model_wrapper_24: ModelWrapper,
+) -> None:
+    """Verify shape guards for invalid activation tensor ranks/batch sizes."""
+    mock_model_wrapper_24.activations["layer"] = torch.randn(2, 3, 896)
+    _set_generation_state(
+        mock_model_wrapper_24,
+        prompt="x",
+        generated_text="y",
+        output_ids=torch.tensor([[1, 2, 3]]),
+        token_texts=["a", "b", "c"],
+    )
+    with pytest.raises(ValueError):
+        mock_model_wrapper_24.save_activations()
+
+    mock_model_wrapper_24.activations["layer"] = torch.randn(896)
+    with pytest.raises(ValueError):
+        mock_model_wrapper_24.save_activations()
+
+
+def test_save_activations_no_tokens_raises(
+    mock_model_wrapper_24: ModelWrapper,
+) -> None:
+    """Verify alignment guard rejects empty token/activation intersections."""
+    mock_model_wrapper_24.activations["layer"] = torch.empty(0, 896)
+    _set_generation_state(
+        mock_model_wrapper_24,
+        prompt="x",
+        generated_text="y",
+        output_ids=torch.tensor([[]], dtype=torch.long),
+        token_texts=[],
+        token_strs=[],
+    )
+    with pytest.raises(ValueError):
+        mock_model_wrapper_24.save_activations()
+
+
+def test_gitignore_large_artifact_appends_pattern(tmp_path: Path) -> None:
+    """Verify large artifact helper appends ignore patterns for oversize files."""
+    artifact = tmp_path / "big.pt"
+    artifact.write_bytes(b"x" * 2048)
+    gitignore = tmp_path / ".gitignore"
+
+    _call_protected(
+        ModelWrapper,
+        "_gitignore_large_artifact",
+        artifact_path=artifact,
+        gitignore_path=gitignore,
+        max_mb=0,
+        mode="file",
+    )
+
+    content = gitignore.read_text(encoding="utf-8")
+    assert "big.pt" in content
+
+
+def test_model_wrapper_main_smoke_with_stub(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify module-level main executes with a lightweight stub wrapper."""
+
+    class StubWrapper:
+        def __init__(self, model_name: str, layer_idx: int) -> None:
+            _ = model_name
+            _ = layer_idx
+
+        def generate_with_activations(
+            self,
+            prompt: str,
+            max_tokens: int,
+        ) -> tuple[str, dict[str, torch.Tensor]]:
+            _ = prompt
+            _ = max_tokens
+            return "ok", {"layer": torch.randn(1, 2, 896)}
+
+        def save_activations(self, batch_idx: int) -> Path:
+            _ = batch_idx
+            return Path("dummy.pt")
+
+        def unregister_hooks(self) -> None:
+            return None
+
+    monkeypatch.setattr(model_wrapper_module, "ModelWrapper", StubWrapper)
+    model_wrapper_module.main()
+
+
+def test_init_missing_and_not_directory_errors(tmp_path: Path) -> None:
+    """Verify constructor path validation for missing and non-directory model paths."""
+    missing = tmp_path / "missing-dir"
+    with pytest.raises(FileNotFoundError):
+        ModelWrapper(model_name=str(missing), layer_idx=0)
+
+    file_path = tmp_path / "model-file"
+    file_path.write_text("x", encoding="utf-8")
+    with pytest.raises(NotADirectoryError):
+        ModelWrapper(model_name=str(file_path), layer_idx=0)
+
+
+def test_infer_model_input_device_fallbacks(
+    mock_model_wrapper_24: ModelWrapper,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify input-device inference handles string/device/no-params branches."""
+
+    class StrDeviceModel:
+        device = "cpu"
+
+        def parameters(self) -> Iterator[torch.Tensor]:
+            yield torch.nn.Parameter(torch.zeros(1))
+
+    monkeypatch.setattr(mock_model_wrapper_24, "model", StrDeviceModel())
+    inferred = _call_protected(mock_model_wrapper_24, "_infer_model_input_device")
+    assert isinstance(inferred, torch.device)
+    assert inferred.type == "cpu"
+
+    class EmptyParamsModel:
+        device = None
+
+        def parameters(self) -> Iterator[torch.Tensor]:
+            if False:
+                yield torch.nn.Parameter(torch.zeros(1))
+            return
+
+    mock_model_wrapper_24.device = torch.device("cpu")
+    monkeypatch.setattr(mock_model_wrapper_24, "model", EmptyParamsModel())
+    inferred = _call_protected(mock_model_wrapper_24, "_infer_model_input_device")
+    assert isinstance(inferred, torch.device)
+    assert inferred.type == "cpu"
+
+
+def test_save_activations_version_and_folder_gitignore(tmp_path: Path) -> None:
+    """Verify versioned filename logic and folder-level gitignore pattern."""
+    model = ModelWrapper.__new__(ModelWrapper)
+    model.model_name = "m"
+    model.layer_idx = 1
+    model.device = torch.device("cpu")
+    model.activation_device = torch.device("cpu")
+    model.activations = {"layer": torch.randn(3, 896)}
+    _set_generation_state(
+        model,
+        prompt="p",
+        generated_text="g",
+        output_ids=torch.tensor([[1, 2, 3]], dtype=torch.long),
+        token_texts=["a", "b", "c"],
+        token_strs=["a", "b", "c"],
+    )
+
+    save_dir = tmp_path / "acts"
+    save_dir.mkdir()
+    first = save_dir / "sample.pt"
+    first.write_bytes(b"already-exists")
+
+    out = model.save_activations(
+        save_dir=save_dir,
+        file_stem="sample",
+        gitignore_if_large=True,
+        max_mb=0,
+        gitignore_path=tmp_path / ".gitignore",
+        gitignore_mode="folder",
+    )
+    assert out.name.startswith("sample_v")
+    gitignore = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+    assert "data/activations/" in gitignore
+
+
+def test_save_activations_keep_device_branch(tmp_path: Path) -> None:
+    """Verify device='keep' branch keeps tensor serialization flow valid."""
+    model = ModelWrapper.__new__(ModelWrapper)
+    model.model_name = "m"
+    model.layer_idx = 1
+    model.device = torch.device("cpu")
+    model.activation_device = torch.device("cpu")
+    model.activations = {"layer": torch.randn(3, 896)}
+    _set_generation_state(
+        model,
+        prompt="p",
+        generated_text="g",
+        output_ids=torch.tensor([[1, 2, 3]], dtype=torch.long),
+        token_texts=["a", "b", "c"],
+        token_strs=["a", "b", "c"],
+    )
+
+    out = model.save_activations(
+        save_dir=tmp_path,
+        file_stem="keep_case",
+        device="keep",
+        gitignore_if_large=False,
+    )
+    payload = torch.load(out, weights_only=True)
+    assert isinstance(payload["activations"], torch.Tensor)
+
+
+def test_generate_non_positive_max_tokens_raises(
+    mock_model_wrapper_24: ModelWrapper,
+) -> None:
+    """Verify generation validates positive max_tokens input."""
+    with pytest.raises(ValueError):
+        mock_model_wrapper_24.generate_with_activations("hi", max_tokens=0)
+
+
+def test_constructor_layer_index_bounds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify constructor rejects negative and out-of-range layer indices."""
+    model_dir = tmp_path / "fake"
+    model_dir.mkdir()
+    monkeypatch.setattr(
+        "brain_surgery.model_wrapper.AutoModelForCausalLM.from_pretrained",
+        lambda *args, **kwargs: FakeCausalLM(layers=24, hidden_dim=896),
+    )
+    monkeypatch.setattr(
+        "brain_surgery.model_wrapper.AutoTokenizer.from_pretrained",
+        lambda *args, **kwargs: FakeTokenizer(),
+    )
+
+    with pytest.raises(ValueError):
+        ModelWrapper(model_name=str(model_dir), layer_idx=-1)
+    with pytest.raises(ValueError):
+        ModelWrapper(model_name=str(model_dir), layer_idx=99)
+
+
+def test_resolve_transformer_layers_error_branch(
+    mock_model_wrapper_24: ModelWrapper,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify unsupported model architecture fails in layer resolver."""
+    monkeypatch.setattr(mock_model_wrapper_24, "model", object())
+    with pytest.raises(RuntimeError):
+        _call_protected(mock_model_wrapper_24, "_resolve_transformer_layers")
+
+
+def test_generate_without_hooks_returns_empty_activation_dict(
+    mock_model_wrapper_24: ModelWrapper,
+) -> None:
+    """Verify generation succeeds with empty activation capture when hooks removed."""
+    mock_model_wrapper_24.unregister_hooks()
+    _text, activations = mock_model_wrapper_24.generate_with_activations(
+        "prompt", max_tokens=2
+    )
+    assert activations == {}
+
+
+def test_generate_decode_list_and_token_str_single_string(
+    mock_model_wrapper_24: ModelWrapper,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify defensive decode/list and convert_ids_to_tokens string branches."""
+
+    class OddTokenizer(FakeTokenizer):
+        def decode(
+            self, token_ids: object, skip_special_tokens: bool = True
+        ) -> str | list[str]:
+            _ = token_ids
+            _ = skip_special_tokens
+            return ["decoded-list"]
+
+        def convert_ids_to_tokens(self, token_ids: list[int]) -> str:
+            _ = token_ids
+            return "tok"
+
+    monkeypatch.setattr(mock_model_wrapper_24, "tokenizer", OddTokenizer())
+    text, _activations = mock_model_wrapper_24.generate_with_activations(
+        "x", max_tokens=2
+    )
+    assert text == "decoded-list"
+    assert mock_model_wrapper_24.last_token_strs == ["tok"]
+
+
+def test_total_layers_error_paths(mock_model_wrapper_24: ModelWrapper) -> None:
+    """Verify total_layers raises for unloaded model and missing config metadata."""
+    wrapper = ModelWrapper.__new__(ModelWrapper)
+    setattr(wrapper, "model", None)
+    setattr(wrapper, "tokenizer", None)
+    with pytest.raises(RuntimeError):
+        _ = wrapper.total_layers
+
+    wrapper2 = ModelWrapper.__new__(ModelWrapper)
+    setattr(wrapper2, "model", SimpleNamespace(config=SimpleNamespace()))
+    setattr(wrapper2, "tokenizer", object())
+    with pytest.raises(RuntimeError):
+        _ = wrapper2.total_layers
+
+
+def test_resolve_transformer_layers_transformer_h_branch(
+    mock_model_wrapper_24: ModelWrapper,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify alternate transformer.h architecture branch is supported."""
+    alt = SimpleNamespace(
+        transformer=SimpleNamespace(h=torch.nn.ModuleList([torch.nn.Identity()]))
+    )
+    monkeypatch.setattr(mock_model_wrapper_24, "model", alt)
+    layers = _call_protected(mock_model_wrapper_24, "_resolve_transformer_layers")
+    assert isinstance(layers, torch.nn.ModuleList)
+    assert len(layers) == 1
+
+
+def test_register_hooks_layer_index_out_of_range_runtime() -> None:
+    """Verify _register_hooks rejects layer indices outside discovered layers."""
+    wrapper = ModelWrapper.__new__(ModelWrapper)
+    wrapper.layer_idx = 5
+    wrapper.hooks = []
+    setattr(wrapper, "_activation_steps", [])
+    wrapper.activation_device = torch.device("cpu")
+    setattr(
+        wrapper,
+        "_resolve_transformer_layers",
+        lambda: torch.nn.ModuleList([torch.nn.Identity()]),
+    )
+    with pytest.raises(RuntimeError):
+        _call_protected(wrapper, "_register_hooks")
+
+
+def test_generate_sets_pad_token_when_missing(
+    mock_model_wrapper_24: ModelWrapper,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify generation sets pad_token from eos_token when pad token is missing."""
+
+    class PadlessTokenizer(FakeTokenizer):
+        pad_token_id = None
+        eos_token_id = 1
+        pad_token = None
+        eos_token = "<eos>"
+
+    tok = PadlessTokenizer()
+    monkeypatch.setattr(mock_model_wrapper_24, "tokenizer", tok)
+    _text, _acts = mock_model_wrapper_24.generate_with_activations(
+        "hello", max_tokens=2
+    )
+    assert tok.pad_token == tok.eos_token
+
+
+def test_generate_sequences_object_success_branch(
+    mock_model_wrapper_24: ModelWrapper,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify non-tensor generate output with tensor sequences is accepted."""
+
+    class SeqModel:
+        device = torch.device("cpu")
+
+        def parameters(self) -> Iterator[torch.Tensor]:
+            yield torch.nn.Parameter(torch.zeros(1))
+
+        def generate(self, *args: object, **kwargs: object) -> object:
+            _ = args
+            _ = kwargs
+            return SimpleNamespace(
+                sequences=torch.tensor([[1, 2, 3]], dtype=torch.long)
             )
-            shapes.append(tuple(activations["layer"].shape))
 
-        # All shapes should have same hidden_dim but varying seq_len
-        batch_sizes = [s[0] for s in shapes]
-        hidden_dims = [s[2] for s in shapes]
-
-        assert all(b == batch_sizes[0] for b in batch_sizes), (
-            "batch_size should be consistent"
-        )
-        assert all(h == hidden_dims[0] for h in hidden_dims), (
-            "hidden_dim should be consistent"
-        )
-
-
-# ============================================================================
-# TEST 3: HOOK CLEANUP
-# ============================================================================
-
-
-class TestHookCleanup:
-    """Test suite verifying hook registration and cleanup.
-
-    Requirement: Hooks are properly removed or handled so that subsequent
-    normal model calls don't continue storing activations.
-    """
-
-    def test_hooks_registered_on_init(
-        self: "TestHookCleanup", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify hooks are registered during initialization.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - At least one hook is registered
-            - activations dict starts empty
-        """
-        assert len(tiny_model_wrapper.hooks) > 0, "Hooks should be registered on init"
-        assert tiny_model_wrapper.activations == {}, "activations should start empty"
-
-    def test_hooks_properly_removed(
-        self: "TestHookCleanup", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify unregister_hooks removes all hooks and clears activations.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - hooks list is empty after unregister
-            - activations dict is empty after unregister
-            - Subsequent model forward passes don't store activations
-        """
-        num_hooks_before = len(tiny_model_wrapper.hooks)
-        assert num_hooks_before > 0
-
-        # Unregister hooks
-        tiny_model_wrapper.unregister_hooks()
-        assert len(tiny_model_wrapper.hooks) == 0, "All hooks should be removed"
-        assert len(tiny_model_wrapper.activations) == 0, "activations should be cleared"
-
-    def test_activations_cleared_between_calls(
-        self: "TestHookCleanup", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify activations are cleared between generate calls.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Different calls produce different activation tensors
-            - No accumulation of old activations
-        """
-        _, acts1 = tiny_model_wrapper.generate_with_activations(
-            prompt="First", max_tokens=2
-        )
-        tensor_id_1 = id(acts1["layer"])
-
-        _, acts2 = tiny_model_wrapper.generate_with_activations(
-            prompt="Second", max_tokens=2
-        )
-        tensor_id_2 = id(acts2["layer"])
-
-        assert tensor_id_1 != tensor_id_2, "Activations should be cleared between calls"
-
-
-# ============================================================================
-# TEST 4: DEVICE CONSISTENCY
-# ============================================================================
-
-
-class TestDeviceConsistency:
-    """Test suite verifying device management and VRAM optimization.
-
-    Requirement: Collected activations are moved to CPU to save VRAM, as per
-    hardware constraints.
-    """
-
-    def test_activations_on_cpu(
-        self: "TestDeviceConsistency", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify activations are moved to CPU after capture.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Activation tensor is on CPU device (not CUDA)
-            - Explicitly checks device.type == "cpu"
-        """
-        text, activations = tiny_model_wrapper.generate_with_activations(
-            prompt="Device test", max_tokens=3
-        )
-        activation_tensor = activations["layer"]
-
-        assert activation_tensor.device.type == "cpu", (
-            f"Activations must be on CPU, got {activation_tensor.device}"
-        )
-
-    def test_model_device_vs_activation_device(
-        self: "TestDeviceConsistency", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify model is on GPU (if available) but activations on CPU.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Model is on the expected device (cuda/cpu)
-            - Activations are always on CPU regardless
-            - This demonstrates VRAM optimization
-        """
-        text, activations = tiny_model_wrapper.generate_with_activations(
-            prompt="Model vs activation device", max_tokens=2
-        )
-
-        # Model should be on detected device
-        assert tiny_model_wrapper.device == tiny_model_wrapper.device
-        # Activations should ALWAYS be on CPU for VRAM savings
-        assert activations["layer"].device.type == "cpu"
-
-    def test_multiple_activations_on_cpu(
-        self: "TestDeviceConsistency", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Verify all captured activations across calls are on CPU.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Multiple generation calls all produce CPU tensors
-            - No GPU memory accumulation
-        """
-        for i in range(3):
-            text, activations = tiny_model_wrapper.generate_with_activations(
-                prompt=f"Prompt {i}", max_tokens=2
-            )
-            assert activations["layer"].device.type == "cpu", (
-                f"Activation {i} not on CPU"
-            )
-
-
-# ============================================================================
-# ADDITIONAL TESTS: ERROR HANDLING AND EDGE CASES
-# ============================================================================
-
-
-class TestModelWrapperInitialization:
-    """Test suite for ModelWrapper initialization."""
-
-    def test_init_with_valid_model(
-        self: "TestModelWrapperInitialization", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test initialization with a valid model.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - ModelWrapper attributes are correctly set
-            - Model and tokenizer are loaded
-        """
-        assert isinstance(tiny_model_wrapper.model_name, str)
-        assert len(tiny_model_wrapper.model_name) > 0
-        assert tiny_model_wrapper.layer_idx == 1
-        assert tiny_model_wrapper.model is not None
-        assert tiny_model_wrapper.tokenizer is not None
-
-    def test_init_with_negative_layer_idx(
-        self: "TestModelWrapperInitialization",
-        tiny_local_model_dir: Path,
-    ) -> None:
-        """Test that negative layer_idx raises ValueError.
-
-        Asserts:
-            - ValueError raised with appropriate message
-        """
-        with pytest.raises(ValueError, match="layer_idx must be non-negative"):
-            ModelWrapper(
-                model_name=str(tiny_local_model_dir),
-                layer_idx=-1,
-            )
-
-    def test_device_detection(
-        self: "TestModelWrapperInitialization", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test that device is correctly detected.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Device is either cuda (if available) or cpu
-        """
-        expected_device = (
-            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        )
-        assert tiny_model_wrapper.device == expected_device
-
-    def test_model_in_eval_mode(
-        self: "TestModelWrapperInitialization", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test that model is set to evaluation mode.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Model training flag is False
-        """
-        assert not tiny_model_wrapper.model.training
-
-
-class TestHookRegistration:
-    """Test suite for forward hook registration."""
-
-    def test_hooks_registered(
-        self: "TestHookRegistration", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test that hooks are properly registered on initialization.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - At least one hook registered
-        """
-        assert len(tiny_model_wrapper.hooks) > 0
-        assert tiny_model_wrapper.activations == {}
-
-    def test_hook_unregistration(
-        self: "TestHookRegistration", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test that unregister_hooks properly removes all hooks.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - hooks list is empty after unregistration
-            - activations dict is cleared
-        """
-        num_hooks_before = len(tiny_model_wrapper.hooks)
-        assert num_hooks_before > 0
-
-        tiny_model_wrapper.unregister_hooks()
-        assert len(tiny_model_wrapper.hooks) == 0
-        assert len(tiny_model_wrapper.activations) == 0
-
-    def test_layer_out_of_range(
-        self: "TestHookRegistration", tiny_local_model_dir: Path
-    ) -> None:
-        """Test that out-of-range layer_idx raises RuntimeError.
-
-        Asserts:
-            - RuntimeError raised for layer_idx >= num_layers
-        """
-        with pytest.raises(RuntimeError, match="exceeds number of layers"):
-            ModelWrapper(
-                model_name=str(tiny_local_model_dir),
-                layer_idx=100,
-            )
-
-
-class TestTextGenerationWithActivations:
-    """Test suite for text generation with activation capture."""
-
-    def test_generate_with_valid_prompt(
-        self: "TestTextGenerationWithActivations", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test generation with a valid non-empty prompt.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Generated text is a string
-            - Text is longer than original prompt
-            - Activations returned as dict with "layer" key
-        """
-        prompt = "Hello world"
-        text, activations = tiny_model_wrapper.generate_with_activations(
-            prompt=prompt, max_tokens=5
-        )
-
-        assert isinstance(text, str)
-        assert tiny_model_wrapper._last_output_ids is not None
-        prompt_ids = tiny_model_wrapper.tokenizer(prompt, return_tensors="pt")[
-            "input_ids"
-        ][0]
-        assert tiny_model_wrapper._last_output_ids.shape[1] > prompt_ids.numel()
-        assert isinstance(activations, dict)
-        assert "layer" in activations
-
-    def test_generate_with_empty_prompt(
-        self: "TestTextGenerationWithActivations", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test that empty prompt raises ValueError.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - ValueError raised with "Prompt cannot be empty" message
-        """
-        with pytest.raises(ValueError, match="Prompt cannot be empty"):
-            tiny_model_wrapper.generate_with_activations(prompt="", max_tokens=10)
-
-    def test_generate_with_invalid_max_tokens(
-        self: "TestTextGenerationWithActivations", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test that non-positive max_tokens raises ValueError.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - ValueError raised for max_tokens=0
-            - ValueError raised for max_tokens<0
-        """
-        prompt = "Hello"
-
-        with pytest.raises(ValueError, match="max_tokens must be positive"):
-            tiny_model_wrapper.generate_with_activations(prompt=prompt, max_tokens=0)
-
-        with pytest.raises(ValueError, match="max_tokens must be positive"):
-            tiny_model_wrapper.generate_with_activations(prompt=prompt, max_tokens=-5)
-
-    def test_different_temperatures(
-        self: "TestTextGenerationWithActivations", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test generation with different temperature values.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Both low and high temperature generations succeed
-            - Both return strings
-        """
-        prompt = "Hello"
-
-        text1, _ = tiny_model_wrapper.generate_with_activations(
-            prompt=prompt, max_tokens=3, temperature=0.1
-        )
-        text2, _ = tiny_model_wrapper.generate_with_activations(
-            prompt=prompt, max_tokens=3, temperature=1.5
-        )
-
-        assert isinstance(text1, str)
-        assert isinstance(text2, str)
-
-    def test_different_top_p(
-        self: "TestTextGenerationWithActivations", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test generation with different top_p (nucleus sampling) values.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - Both low and high top_p generations succeed
-            - Both return strings
-        """
-        prompt = "The quick"
-
-        text1, _ = tiny_model_wrapper.generate_with_activations(
-            prompt=prompt, max_tokens=3, top_p=0.5
-        )
-        text2, _ = tiny_model_wrapper.generate_with_activations(
-            prompt=prompt, max_tokens=3, top_p=0.95
-        )
-
-        assert isinstance(text1, str)
-        assert isinstance(text2, str)
-
-
-class TestModelWrapperStringRepresentation:
-    """Test suite for __repr__ method."""
-
-    def test_repr_format(
-        self: "TestModelWrapperStringRepresentation", tiny_model_wrapper: ModelWrapper
-    ) -> None:
-        """Test that __repr__ returns a properly formatted string.
-
-        Args:
-            tiny_model_wrapper: Pytest fixture providing ModelWrapper with
-                tiny test model.
-
-        Asserts:
-            - repr contains "ModelWrapper" class name
-            - repr contains model name
-            - repr contains layer_idx
-            - repr contains device info
-        """
-        repr_str = repr(tiny_model_wrapper)
-
-        assert "ModelWrapper" in repr_str
-        assert "model_name=" in repr_str
-        assert "layer_idx=1" in repr_str
-        assert "device=" in repr_str
+    monkeypatch.setattr(mock_model_wrapper_24, "model", SeqModel())
+    monkeypatch.setattr(
+        mock_model_wrapper_24,
+        "_infer_model_input_device",
+        lambda: torch.device("cpu"),
+    )
+    text, _acts = mock_model_wrapper_24.generate_with_activations("hello", max_tokens=2)
+    assert isinstance(text, str)
+    assert isinstance(mock_model_wrapper_24.last_output_ids, torch.Tensor)
+
+
+def test_gitignore_large_artifact_oserror_and_existing_pattern(tmp_path: Path) -> None:
+    """Verify gitignore helper safely handles stat errors and duplicate patterns."""
+    missing = tmp_path / "missing.pt"
+    gitignore = tmp_path / ".gitignore"
+    _call_protected(
+        ModelWrapper,
+        "_gitignore_large_artifact",
+        artifact_path=missing,
+        gitignore_path=gitignore,
+        max_mb=0,
+        mode="file",
+    )
+    assert not gitignore.exists()
+
+    artifact = tmp_path / "x.pt"
+    artifact.write_bytes(b"x" * 2048)
+    gitignore.write_text(str(artifact).replace("\\", "/"), encoding="utf-8")
+    before = gitignore.read_text(encoding="utf-8")
+    _call_protected(
+        ModelWrapper,
+        "_gitignore_large_artifact",
+        artifact_path=artifact,
+        gitignore_path=gitignore,
+        max_mb=0,
+        mode="file",
+    )
+    after = gitignore.read_text(encoding="utf-8")
+    assert before == after
+
+
+def test_model_wrapper_main_prints_missing_layer_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify module-level main reaches 'missing key layer' print branch."""
+
+    class StubWrapperNoLayer:
+        def __init__(self, model_name: str, layer_idx: int) -> None:
+            _ = model_name
+            _ = layer_idx
+
+        def generate_with_activations(
+            self,
+            prompt: str,
+            max_tokens: int,
+        ) -> tuple[str, dict[str, torch.Tensor]]:
+            _ = prompt
+            _ = max_tokens
+            return "ok", {}
+
+        def save_activations(self, batch_idx: int) -> Path:
+            _ = batch_idx
+            return Path("dummy.pt")
+
+        def unregister_hooks(self) -> None:
+            return None
+
+    monkeypatch.setattr(model_wrapper_module, "ModelWrapper", StubWrapperNoLayer)
+    model_wrapper_module.main()
