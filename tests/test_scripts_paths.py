@@ -250,16 +250,12 @@ def test_verify_pilot_run_phase_q4_q5_uses_spherical_features_and_writes_report(
     assert payload["theme_summary"]["Tactical"] == 0
 
 
-def test_verify_pilot_experiment_forwards_default_checkpoint(
+def test_verify_pilot_experiment_elbow_flag_applies_preset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     verify_pilot = _load_script_module(
-        "verify_pilot",
+        "verify_pilot_test_experiment_flag",
         SCRIPTS_DIR / "verify_pilot.py",
-    )
-    experiment = _load_script_module(
-        "verify_pilot_experiment_test",
-        SCRIPTS_DIR / "verify_pilot_experiment.py",
     )
 
     captured: dict[str, object] = {}
@@ -286,27 +282,54 @@ def test_verify_pilot_experiment_forwards_default_checkpoint(
             _ = model_name
             _ = layer_idx
 
-    def fake_run_phase_q6(
+    def fake_run_phase_q4_q5(
         interpreter: object,
-        model_wrapper: object,
         *,
-        checkpoint_path: Path,
-    ) -> tuple[dict[str, float], dict[str, float], dict[str, float], object]:
-        _ = interpreter
-        _ = model_wrapper
-        captured["checkpoint_path"] = checkpoint_path
-        return {}, {}, {}, object()
+        elbow_start_k: int,
+        elbow_step: int,
+        elbow_max_k: int,
+        top_features_csv_path: Path | None = None,
+        elbow_json_path: Path | None = None,
+        elbow_plot_path: Path | None = None,
+        cluster_report_json_path: Path | None = None,
+        global_census_csv_path: Path | None = None,
+    ) -> None:
+        _ = (
+            interpreter,
+            top_features_csv_path,
+            elbow_json_path,
+            elbow_plot_path,
+            cluster_report_json_path,
+            global_census_csv_path,
+        )
+        captured["elbow_start_k"] = elbow_start_k
+        captured["elbow_step"] = elbow_step
+        captured["elbow_max_k"] = elbow_max_k
 
-    monkeypatch.setattr(experiment, "_validate_default_files", lambda *_: None)
-    monkeypatch.setattr(experiment, "SAEInterpreter", FakeInterpreter)
-    monkeypatch.setattr(experiment, "ModelWrapper", FakeModelWrapper)
-    monkeypatch.setattr(experiment, "run_phase_q4_q5", lambda *args, **kwargs: None)
-    monkeypatch.setattr(experiment, "run_phase_q6", fake_run_phase_q6)
-    monkeypatch.setattr(experiment, "run_dtype_audit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "verify_pilot.py",
+            "--experiment-elbow",
+        ],
+    )
+    monkeypatch.setattr(verify_pilot, "_validate_default_files", lambda *_: None)
+    monkeypatch.setattr(verify_pilot, "SAEInterpreter", FakeInterpreter)
+    monkeypatch.setattr(verify_pilot, "ModelWrapper", FakeModelWrapper)
+    monkeypatch.setattr(verify_pilot, "run_phase_q4_q5", fake_run_phase_q4_q5)
+    monkeypatch.setattr(
+        verify_pilot,
+        "run_phase_q6",
+        lambda *args, **kwargs: ({}, {}, {}, object()),
+    )
+    monkeypatch.setattr(verify_pilot, "run_dtype_audit", lambda *args, **kwargs: None)
 
-    experiment.main()
+    verify_pilot.main()
 
-    assert captured["checkpoint_path"] == verify_pilot.DEFAULT_CHECKPOINT
+    assert captured["elbow_start_k"] == verify_pilot.EXPERIMENT_ELBOW_START_K
+    assert captured["elbow_step"] == verify_pilot.EXPERIMENT_ELBOW_STEP
+    assert captured["elbow_max_k"] == verify_pilot.EXPERIMENT_ELBOW_MAX_K
 
 
 def test_train_university_main_uses_run_scoped_checkpoint_when_none(

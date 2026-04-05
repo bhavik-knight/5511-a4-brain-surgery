@@ -11,10 +11,20 @@ Implementation files:
 Learn sparse latent features that reconstruct hidden activations while reducing
 feature superposition.
 
+## SAE Architecture
+
+- Type: standard sparse autoencoder (linear encoder + linear decoder).
+- Sparsity mechanism:
+  - ReLU in encoder bottleneck.
+  - $L_1$ penalty on latent activations.
+- Expansion factors:
+  - Qwen-2.5-0.5B pilots: 4x expansion (3584 latent features).
+  - Qwen-2.5-7B golden target: 32x expansion (114,688 latent features).
+
 Objective:
 
 $$
-\\mathcal{L} = \\operatorname{MSE}(x, \\hat{x}) + \\lambda \\lVert z \\rVert_1
+\mathcal{L} = \operatorname{MSE}(x, \hat{x}) + \lambda \lVert z \rVert_1
 $$
 
 where reconstruction preserves information and $L_1$ regularization promotes

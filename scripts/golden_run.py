@@ -34,11 +34,11 @@ def main() -> None:
     print(f"Activation matrix shape: {summary.activation_shape}")
 
     dataset_path = ACTIVATIONS_DIR / "soccer_activations_dataset.pt"
-    data = torch.load(dataset_path)
+    data = torch.load(dataset_path, weights_only=True)
     activation_matrix = data["activation_matrix"]
     print(f"Saved dataset shape: {tuple(activation_matrix.shape)}")
 
-    sae = SparseAutoencoder(input_dim=896, latent_dim=3584)
+    sae = SparseAutoencoder()
     trainer = SAETrainer(
         model=sae,
         learning_rate=1e-4,
@@ -48,7 +48,7 @@ def main() -> None:
         patience=5,
         checkpoint_path=CHECKPOINTS_DIR / "sae_checkpoint.pt",
     )
-    history, train_summary = trainer.train(activation_matrix)
+    _, train_summary = trainer.train(activation_matrix)
     print(
         "Training summary: "
         f"epochs={train_summary.epochs}, "

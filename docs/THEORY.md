@@ -3,25 +3,25 @@
 ## 1. SAE Bottleneck Logic and Feature Disentanglement
 
 Following the sparse autoencoder framing, we treat transformer hidden states as
-vectors $x \\in \\mathbb{R}^{d}$ and learn latent features
-$z \\in \\mathbb{R}^{m}$ with expansion ($m > d$) and sparsity pressure.
+vectors $x \in \mathbb{R}^{d}$ and learn latent features
+$z \in \mathbb{R}^{m}$ with expansion ($m > d$) and sparsity pressure.
 
 Linear encoder/decoder core:
 
 $$
-z = \\operatorname{ReLU}(W_e x + b_e), \\quad \\hat{x} = W_d z + b_d
+z = \operatorname{ReLU}(W_e x + b_e), \quad \hat{x} = W_d z + b_d
 $$
 
 where:
 
-- $W_e \\in \\mathbb{R}^{m \\times d}$ is the encoder matrix.
-- $W_d \\in \\mathbb{R}^{d \\times m}$ is the decoder matrix.
-- $\\hat{x}$ is the reconstruction of the input activation.
+- $W_e \in \mathbb{R}^{m \times d}$ is the encoder matrix.
+- $W_d \in \mathbb{R}^{d \times m}$ is the decoder matrix.
+- $\hat{x}$ is the reconstruction of the input activation.
 
 Training objective:
 
 $$
-\\mathcal{L} = \\frac{1}{n}\\sum\_{i=1}^{n}\\lVert x_i - \\hat{x}_i \\rVert_2^2 + \\lambda \\cdot \\frac{1}{n}\\sum_{i=1}^{n}\\lVert z_i \\rVert_1
+\mathcal{L} = \frac{1}{n}\sum_{i=1}^{n}\lVert x_i - \hat{x}_i \rVert_2^2 + \lambda \cdot \frac{1}{n}\sum_{i=1}^{n}\lVert z_i \rVert_1
 $$
 
 Why the $L_1$ penalty matters:
@@ -36,10 +36,10 @@ We capture internal activations by registering forward hooks on a middle
 transformer layer. The measurement pipeline is:
 
 $$
-\\mathrm{prompt} \\rightarrow h\_\\ell \\rightarrow \\mathrm{token\\ activation\\ rows}
+\mathrm{prompt} \rightarrow h_{\ell} \rightarrow \mathrm{token\ activation\ rows}
 $$
 
-where $h\_\\ell$ denotes hidden states at layer $\\ell$.
+where $h_{\ell}$ denotes hidden states at layer $\ell$.
 
 ## 3. Why We Pivoted to Spherical K-Means
 
@@ -53,7 +53,7 @@ in high-dimensional feature spaces, a classic curse-of-dimensionality issue:
 So we switched to Spherical K-Means by normalizing features before clustering:
 
 $$
-\\widetilde{f}\_i = \\frac{f_i}{\\lVert f_i \\rVert_2}
+\widetilde{f}_i = \frac{f_i}{\lVert f_i \rVert_2}
 $$
 
 This emphasizes directional similarity (cosine-like structure), which is better
@@ -64,7 +64,7 @@ aligned with semantic feature grouping.
 For candidate values of $k$, we compute inertia/SSE:
 
 $$
-\\operatorname{SSE}(k) = \\sum\_{c=1}^{k}\\sum\_{f_i \\in C_c}\\lVert f_i - \\mu_c \\rVert_2^2
+\operatorname{SSE}(k) = \sum_{c=1}^{k}\sum_{f_i \in C_c}\lVert f_i - \mu_c \rVert_2^2
 $$
 
 We select $k$ by a dynamic slowdown heuristic on SSE improvement and export an

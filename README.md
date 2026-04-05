@@ -9,6 +9,7 @@ with end-to-end run-scoped training, verification, and executive reporting.
 - [Installation](#installation)
 - [Quick Start (Local Verification)](#quick-start-local-verification)
 - [Usage Guide](#usage-guide)
+- [Reproducing the Results (7B)](#reproducing-the-results-7b)
 - [What Is Finalized](#what-is-finalized)
 - [Development Notes](#development-notes)
 - [References](#references)
@@ -35,60 +36,94 @@ Setup:
 
 ```bash
 uv sync
+```
+
+- Activate the environment (for mac/linux)
+
+```bash
+source .venv/bin/activate
+```
+
+or (for windows)
+
+```
+.venv/Scripts/activate
+```
+
+```bash
 pre-commit install
 uv run pytest tests/
 ```
 
-Model weights (offline local directory expected at `models/qwen2.5-0.5b`):
+Model weights (offline local directory expected at `models/qwen2.5-7b`):
 
 ```bash
-uv run hf download Qwen/Qwen2.5-0.5B --local-dir ./models/qwen2.5-0.5b
-```
-
-## Quick Start (Local Verification)
-
-Use this 3-command verification flow with a shared run id:
-
-```bash
-uv run python scripts/train_university.py --smoke-test --run-id run_YYYYMMDD_HHMM
-uv run python scripts/verify_pilot.py --run-id run_YYYYMMDD_HHMM
-uv run python scripts/generate_report.py --run-id run_YYYYMMDD_HHMM
+uv run hf download Qwen/Qwen2.5-7B --local-dir ./models/qwen2.5-7b
 ```
 
 ## Usage Guide
 
-The standard workflow is a 3-step run pipeline.
+**Pre-requisite:**
 
-1. Train SAE (smoke test or full run)
+- Ensure the local data directory exists.
 
-```bash
-uv run python scripts/train_university.py --smoke-test --run-id run_YYYYMMDD_HHMM
-```
+- Before training, you must extract activation tensors from the LLM. This module runs the prompt corpus through the model hooks and saves a consolidated dataset.
 
-For full training, remove `--smoke-test` and tune training flags as needed.
+`mkdir -p data/activations/`
 
-2. Verify pilot (Q4-Q6) with run-scoped paths
+## Reproducing the Results (7B)
 
-```bash
-uv run python scripts/verify_pilot.py --run-id run_YYYYMMDD_HHMM
-```
+Use the following workflow to reproduce the final 7B pipeline.
 
-Checkpoint resolution order is:
-
-1. `--checkpoint` (if explicitly provided)
-
-1. `results/experiments/<run_id>/checkpoints/sae_best.pt`
-
-1. global fallback checkpoint
-
-1. Generate executive summary report
+### 1. Model Acquisition
 
 ```bash
-uv run python scripts/generate_report.py --run-id run_YYYYMMDD_HHMM
+uv run hf download Qwen/Qwen2.5-7B --local-dir ./models/qwen2.5-7b
 ```
 
-This writes `executive_summary.json` in
-`results/experiments/<run_id>/`.
+### 2. Activation Extraction
+
+Generate the soccer activation dataset from Layer 14 residual-stream hooks.
+
+```bash
+uv run python -m brain_surgery.data_gen
+```
+
+### 3. SAE Training
+
+Train for 100 epochs with L1 penalty 0.001.
+
+```bash
+uv run python scripts/train_university.py --epoch <num_epoches> --l1 <lambda_panelty> --wandb-run-name <wandb-ai-run-name-for-traceability>
+```
+
+### 4. Verification and Reporting
+
+Verify pilot results (Q4-Q6) and generate an executive summary.
+
+```bash
+# Verify clusters, purity, and interventions
+uv run scripts/verify_pilot.py \
+  --run-id <run_id> \
+  --checkpoint results/experiments/<run_id>/checkpoints/sae_best.pt \
+  --dataset data/activations/soccer_activations_dataset.pt
+```
+
+### 5. Report Generation
+
+Synthesize interpretability findings from the final run ID.
+
+```bash
+uv run python scripts/generate_report.py --run-id <run_id>
+```
+
+Checkpoint resolution follows the experiment hierarchy: `results/experiments/<run_id>/checkpoints/sae_best.pt`.
+
+### 6. Project Structure Note
+
+- Run-scoped outputs are stored under `results/experiments/`.
+- For the 7B workflow, the SAE uses a 32x expansion factor:
+  $3584 \\times 32 = 114688$ latent features.
 
 ## What Is Finalized
 

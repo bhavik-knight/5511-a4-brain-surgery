@@ -2,6 +2,23 @@
 
 Implementation file: `src/brain_surgery/data_gen.py`
 
+## Dataset Definition (Soccer Activations)
+
+The SAE dataset is derived from internal model activations, not raw text.
+
+- Corpus size: 170 curated soccer prompts.
+- Domain coverage: player biographies (Messi, Ronaldo), team tactics,
+  league history, and match rules.
+- Capture location: Layer 12 (0.5B Model) / 14 (7B Model) residual stream.
+- Storage tensor: $137557 \times d_{\mathrm{model}}$ in
+  `data/activations/soccer_activations_dataset.pt`.
+
+### Layer Rationale
+
+Layer 12/14 is treated as a semantic sweet spot: syntax is already integrated,
+while token-level commitment is not yet fully finalized. This improves the
+quality of downstream feature interpretation and intervention studies.
+
 ## Theoretical Goal
 
 Create a trustworthy measurement dataset linking each token event to its hidden
@@ -10,7 +27,7 @@ by the quality and traceability of this mapping.
 
 ## Implementation
 
-- Uses a curated NDJSON corpus (`data/corpus/curated_soccer_prompts_1100.ndjson`)
+- Uses a curated NDJSON corpus (`data/corpus/soccer_prompts.ndjson`)
   with structured fields such as category, topic, and prompt text.
 - Validates every NDJSON record and rejects malformed lines early.
 - Runs prompts through the hooked model to collect per-token activation rows.
@@ -34,4 +51,4 @@ validation and intervention analysis.
 
 - Module: `src/brain_surgery/data_gen.py`
 - Dataset builder: `DataGenerator.generate_dataset(...)`
-- Corpus source: `data/corpus/curated_soccer_prompts_1100.ndjson`
+- Corpus source: `data/corpus/soccer_prompts.ndjson`

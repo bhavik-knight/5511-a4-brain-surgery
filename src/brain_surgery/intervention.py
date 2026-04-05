@@ -11,6 +11,7 @@ from typing import cast
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch.utils.hooks import RemovableHandle
 
 from .model_wrapper import ModelWrapper
 from .sae import SparseAutoencoder
@@ -68,7 +69,7 @@ class SAEIntervention:
         self.original_activations: Tensor | None = None
         self.modified_activations: Tensor | None = None
 
-        self.hook_handle: torch.utils.hooks.RemovableHandle | None = None
+        self.hook_handle: RemovableHandle | None = None
         self.hook_layer_index: int | None = None
         self.hook_layer_name: str | None = None
 
@@ -81,7 +82,7 @@ class SAEIntervention:
             raise ValueError("checkpoint_path must be provided to load SAE")
 
         checkpoint_file = Path(self.checkpoint_path).expanduser().resolve()
-        checkpoint = torch.load(checkpoint_file, map_location="cpu")
+        checkpoint = torch.load(checkpoint_file, map_location="cpu", weights_only=True)
         input_dim = checkpoint["input_dim"]
         latent_dim = checkpoint["latent_dim"]
 
@@ -202,13 +203,22 @@ class SAEIntervention:
             self.original_activations = hidden_states.detach().cpu()
 
             batch_size, seq_len, hidden_dim = hidden_states.shape
+            if hidden_dim != sae.input_dim:
+                raise RuntimeError(
+                    "Activation width and SAE input_dim mismatch: "
+                    f"hidden_dim={hidden_dim}, sae.input_dim={sae.input_dim}."
+                )
             flat_hidden = hidden_states.reshape(-1, hidden_dim)
 
             with torch.no_grad():
                 latent = sae.encode(flat_hidden)
                 max_val = feature_max_values[feature_index_local].item()
                 clamped_value = clamp_multiplier_local * max_val
-                latent[:, feature_index_local] = clamped_value
+                latent[:, feature_index_local] = torch.as_tensor(
+                    clamped_value,
+                    device=latent.device,
+                    dtype=latent.dtype,
+                )
                 modified_flat_hidden = sae.decode(latent)
 
             modified_hidden_states = modified_flat_hidden.reshape(
@@ -290,7 +300,7 @@ class SAEIntervention:
             key: value.to(self.model_wrapper.device) for key, value in inputs.items()
         }
 
-        generation_kwargs: dict[str, int | float | bool | None] = {
+        generation_kwargs: dict[str, object] = {
             "max_new_tokens": max_new_tokens,
             "do_sample": True,
             "temperature": temperature,
@@ -304,16 +314,20 @@ class SAEIntervention:
 
         self.remove_hook()
 
-        generated_text = self.model_wrapper.tokenizer.decode(
-            generated_ids[0],
-            skip_special_tokens=True,
+        generated_text = str(
+            self.model_wrapper.tokenizer.decode(
+                generated_ids[0],
+                skip_special_tokens=True,
+            )
         )
 
         prompt_length = inputs["input_ids"].shape[1]
         new_token_ids = generated_ids[:, prompt_length:]
-        generated_continuation_text = self.model_wrapper.tokenizer.decode(
-            new_token_ids[0],
-            skip_special_tokens=True,
+        generated_continuation_text = str(
+            self.model_wrapper.tokenizer.decode(
+                new_token_ids[0],
+                skip_special_tokens=True,
+            )
         )
 
         feature_max_value = self.feature_max_values[feature_index].item()
@@ -388,13 +402,14 @@ class SAEIntervention:
 
         result: dict[str, float] = {}
         for token in candidate_tokens:
-            ids = self.model_wrapper.tokenizer(token, add_special_tokens=False)[
-                "input_ids"
-            ]
-            # Next-token scoring only supports candidates that map to exactly one token.
-            if len(ids) != 1:
+            tokenized = self.model_wrapper.tokenizer(token, add_special_tokens=False)
+            ids_obj = tokenized["input_ids"]
+            if not isinstance(ids_obj, list):
                 continue
-            result[token] = float(log_probs[ids[0]].item())
+            # Next-token scoring only supports candidates that map to exactly one token.
+            if len(ids_obj) != 1 or not isinstance(ids_obj[0], int):
+                continue
+            result[token] = float(log_probs[ids_obj[0]].item())
 
         if feature_index is not None:
             self.remove_hook()

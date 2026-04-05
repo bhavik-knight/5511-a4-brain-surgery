@@ -7,7 +7,7 @@ corpus through a ModelWrapper and saving token-aligned activations.
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, TypedDict
+from typing import Protocol, TypedDict, cast
 
 import torch
 from torch import Tensor
@@ -39,29 +39,31 @@ class ActivationWrapper(Protocol):
         ...
 
     @property
-    def _last_token_texts(self) -> list[str] | None:
+    def last_token_texts(self) -> list[str] | None:
         """Most recent decoded token text list from generation."""
         ...
 
     @property
-    def _last_token_strs(self) -> list[str] | None:
+    def last_token_strs(self) -> list[str] | None:
         """Most recent token strings aligned with token ids."""
         ...
 
     @property
-    def _last_output_ids(self) -> Tensor | None:
+    def last_output_ids(self) -> Tensor | None:
         """Most recent generated token ids tensor."""
         ...
 
     @property
-    def _last_generated_text(self) -> str | None:
+    def last_generated_text(self) -> str | None:
         """Most recent generated text string."""
         ...
 
     def generate_with_activations(
         self,
         prompt: str,
-        **kwargs: object,
+        max_tokens: int = 50,
+        temperature: float = 0.7,
+        top_p: float = 0.95,
     ) -> tuple[str, dict[str, Tensor]]:
         """Generate text and return activation payloads."""
         ...
@@ -139,12 +141,12 @@ class DataGenerator:
                 FileNotFoundError: If the corpus file is missing.
                 ValueError: If the corpus file exists but contains no prompts.
         """
-        corpus_path = CORPUS_DIR / "curated_soccer_prompts_1100.ndjson"
+        corpus_path = CORPUS_DIR / "soccer_prompts.ndjson"
         if not corpus_path.exists():
             raise FileNotFoundError(
                 "Missing corpus file at "
                 f"{corpus_path}. Create it as NDJSON with fields "
-                "prompt, category, subcategory, topic, tags, era, and region."
+                "id and prompt (other fields like category are optional)."
             )
 
         records: list[PromptRecord] = []
@@ -260,14 +262,31 @@ class DataGenerator:
                 activation_chunks.append(acts_2d)
 
                 # Use internal token metadata from the wrapper for alignment.
-                token_texts = self.wrapper._last_token_texts or []  # noqa: SLF001
-                token_strs = self.wrapper._last_token_strs or []  # noqa: SLF001
-                token_ids = []
-                if self.wrapper._last_output_ids is not None:  # noqa: SLF001
-                    token_ids = (
-                        self.wrapper._last_output_ids[0].tolist()  # noqa: SLF001
+                token_texts_obj = getattr(self.wrapper, "last_token_texts", None)
+                if token_texts_obj is None:
+                    token_texts_obj = getattr(self.wrapper, "_last_token_texts", None)
+                token_texts = cast(list[str], token_texts_obj or [])
+
+                token_strs_obj = getattr(self.wrapper, "last_token_strs", None)
+                if token_strs_obj is None:
+                    token_strs_obj = getattr(self.wrapper, "_last_token_strs", None)
+                token_strs = cast(list[str], token_strs_obj or [])
+
+                token_ids: list[int] = []
+                output_ids_obj = getattr(self.wrapper, "last_output_ids", None)
+                if output_ids_obj is None:
+                    output_ids_obj = getattr(self.wrapper, "_last_output_ids", None)
+                if output_ids_obj is not None:
+                    token_ids = cast(
+                        list[int], cast(Tensor, output_ids_obj)[0].tolist()
                     )
-                generated_text = self.wrapper._last_generated_text or ""  # noqa: SLF001
+
+                generated_text_obj = getattr(self.wrapper, "last_generated_text", None)
+                if generated_text_obj is None:
+                    generated_text_obj = getattr(
+                        self.wrapper, "_last_generated_text", None
+                    )
+                generated_text = str(generated_text_obj or "")
 
                 seq_len = min(len(token_texts), acts_2d.shape[0])
                 seq_lens.append(seq_len)
@@ -337,3 +356,25 @@ class DataGenerator:
         )
 
         return activation_matrix, metadata, summary
+
+
+if __name__ == "__main__":
+    from .model_wrapper import ModelWrapper
+    from .utils import DEFAULT_MODEL_NAME
+
+    print(f"Loading model: {DEFAULT_MODEL_NAME}...")
+    # Initialize wrapper (defaults to Layer 14 and BFloat16 on A100)
+    model_wrapper = ModelWrapper(model_name=DEFAULT_MODEL_NAME)
+
+    print("Capturing activations from prompt corpus...")
+    data_generator = DataGenerator(model_wrapper)
+
+    # Generate and save the consolidated dataset
+    _, _, dataset_summary = data_generator.generate_dataset()
+
+    expected_path = ACTIVATIONS_DIR / "soccer_activations_dataset.pt"
+    print(f"Step 1 Complete: Dataset saved to {expected_path}")
+    print(
+        f"Captured {dataset_summary.total_tokens} tokens across "
+        f"{dataset_summary.num_prompts} prompts."
+    )

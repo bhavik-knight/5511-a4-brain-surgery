@@ -10,10 +10,10 @@ generation and comparing next-token probabilities with controlled baselines.
 Intervention rule:
 
 $$
-z_j \\leftarrow \\alpha \\cdot \\max(z_j)
+z_j \leftarrow \alpha \cdot \max(z_j)
 $$
 
-where $j$ is a target feature and $\\alpha$ is a clamp multiplier.
+where $j$ is a target feature and $\alpha$ is a clamp multiplier.
 
 ## Implementation
 
@@ -28,12 +28,12 @@ where $j$ is a target feature and $\\alpha$ is a clamp multiplier.
 - Q6 reporting uses a specificity logic:
 
 $$
-\\Delta\_{\\text{target}} = p\_{\\text{target}} - p\_{\\text{baseline}}, \\quad
-\\Delta\_{\\text{control}} = p\_{\\text{control}} - p\_{\\text{baseline}}
+\Delta_{\text{target}} = p_{\text{target}} - p_{\text{baseline}}, \quad
+\Delta_{\text{control}} = p_{\text{control}} - p_{\text{baseline}}
 $$
 
 $$
-\\mathrm{Specificity\\ Score} = \\Delta\_{\\text{target}} - \\Delta\_{\\text{control}}
+\mathrm{Specificity\ Score} = \Delta_{\text{target}} - \Delta_{\text{control}}
 $$
 
 - Positive specificity suggests the target feature has a stronger causal effect

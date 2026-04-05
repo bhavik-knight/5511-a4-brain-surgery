@@ -10,6 +10,10 @@ from brain_surgery.sae import SparseAutoencoder
 from brain_surgery.trainer import SAETrainer
 
 
+def _invoke_should_resume(trainer: SAETrainer) -> bool:
+    return bool(getattr(trainer, "_should_resume")())
+
+
 def test_trainer_train_produces_checkpoint_and_summary(tmp_path: Path) -> None:
     """Verify core training loop emits history, summary, and checkpoint."""
     checkpoint = tmp_path / "sae.pt"
@@ -53,7 +57,7 @@ def test_trainer_should_resume_interactive_yes(
     )
 
     monkeypatch.setattr("builtins.input", lambda _prompt: "y")
-    assert trainer._should_resume() is True
+    assert _invoke_should_resume(trainer) is True
 
 
 def test_trainer_resume_from_existing_checkpoint(tmp_path: Path) -> None:
@@ -98,7 +102,7 @@ def test_trainer_should_resume_false_when_checkpoint_missing(tmp_path: Path) -> 
         use_tensorboard=False,
         num_epochs=1,
     )
-    assert trainer._should_resume() is False
+    assert _invoke_should_resume(trainer) is False
 
 
 def test_trainer_should_resume_false_when_auto_resume_disabled(
@@ -115,7 +119,7 @@ def test_trainer_should_resume_false_when_auto_resume_disabled(
         use_tensorboard=False,
         num_epochs=1,
     )
-    assert trainer._should_resume() is False
+    assert _invoke_should_resume(trainer) is False
 
 
 def test_trainer_wandb_and_tensorboard_branches(

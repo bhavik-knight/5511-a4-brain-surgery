@@ -24,6 +24,8 @@ from typing import Literal, cast
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch.utils.hooks import RemovableHandle
+
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -37,6 +39,7 @@ from .utils import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL_NAME,
     DEFAULT_LAYER_IDX,
+    DEFAULT_LAYER_IDX_QWEN_0_5B,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     ROOT_DIR,
@@ -139,15 +142,15 @@ class ModelWrapper:
             self.activation_device = activation_device
 
         # Load model and tokenizer from local disk (offline).
-        # Use FP16 + device_map='auto' on CUDA for VRAM efficiency.
-        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        # Use BFLOAT16 + device_map='auto' on CUDA for A100 VRAM efficiency.
+        dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
         self.model: PreTrainedModel = cast(
             PreTrainedModel,
             AutoModelForCausalLM.from_pretrained(
                 str(model_dir),
                 local_files_only=True,
                 device_map="auto",
-                dtype=torch_dtype,
+                dtype=dtype,
             ),
         )
         self.tokenizer: PreTrainedTokenizer = cast(
@@ -163,7 +166,7 @@ class ModelWrapper:
         # Storage for captured activations
         self.activations: dict[str, Tensor] = {}
         self._activation_steps: list[Tensor] = []
-        self.hooks: list[torch.utils.hooks.RemovableHandle] = []
+        self.hooks: list[RemovableHandle] = []
 
         # Metadata for saving (populated by generate_with_activations)
         self._last_prompt: str | None = None
@@ -174,11 +177,22 @@ class ModelWrapper:
 
         # Register hooks on the target layer
         if self.layer_idx is None:
-            self.layer_idx = self.total_layers // 2
-            print(
-                "Defaulting to layer "
-                f"{self.layer_idx} (midpoint of {self.total_layers} layers)"
-            )
+            model_path_lower = str(model_dir).lower()
+            if (
+                "qwen2.5-0.5b" in model_path_lower
+                or "qwen-2.5-0.5b" in model_path_lower
+            ):
+                self.layer_idx = DEFAULT_LAYER_IDX_QWEN_0_5B
+                print(
+                    f"Defaulting to layer {self.layer_idx} "
+                    "(mid-layer for Qwen-2.5-0.5B)"
+                )
+            else:
+                self.layer_idx = DEFAULT_LAYER_IDX
+                print(
+                    f"Defaulting to layer {self.layer_idx} "
+                    "(optimized for A100/Qwen-2.5-7B)"
+                )
 
         if self.layer_idx < 0:
             raise ValueError(f"layer_idx must be non-negative, got {self.layer_idx}")
@@ -196,7 +210,27 @@ class ModelWrapper:
         Returns:
             True if both model and tokenizer are loaded, False otherwise.
         """
-        return self.model is not None and self.tokenizer is not None
+        return hasattr(self, "model") and hasattr(self, "tokenizer")
+
+    @property
+    def last_token_texts(self) -> list[str] | None:
+        """Read-only access to most recently generated token texts."""
+        return self._last_token_texts
+
+    @property
+    def last_token_strs(self) -> list[str] | None:
+        """Read-only access to most recently generated token string forms."""
+        return self._last_token_strs
+
+    @property
+    def last_output_ids(self) -> Tensor | None:
+        """Read-only access to most recently generated output token IDs."""
+        return self._last_output_ids
+
+    @property
+    def last_generated_text(self) -> str | None:
+        """Read-only access to most recently generated full text."""
+        return self._last_generated_text
 
     @property
     def total_layers(self) -> int:
@@ -303,14 +337,11 @@ class ModelWrapper:
                 # Others return just the tensor
                 hidden_states = output_data
 
-            # Store activations on the requested device.
+            # Store activations on CPU immediately to preserve VRAM for A100.
             # During generation, the model is called multiple times (often with
             # seq_len=1 after the first step). We accumulate steps and stitch
             # them into a single (batch, seq_len, hidden_dim) tensor later.
-            stored = hidden_states.detach()
-            if stored.device != self.activation_device:
-                stored = stored.to(self.activation_device)
-
+            stored = hidden_states.detach().cpu()
             if stored.dim() == 2:
                 stored = stored.unsqueeze(0)
 

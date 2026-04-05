@@ -158,7 +158,7 @@ def main() -> None:
     print(f"WandB dir: {wandb_dir}")
 
     try:
-        payload = torch.load(args.dataset, map_location="cpu")
+        payload = torch.load(args.dataset, map_location="cpu", weights_only=True)
         activation_matrix = payload["activation_matrix"]
         run_epochs = args.epochs
 
@@ -170,7 +170,7 @@ def main() -> None:
                 f"{activation_matrix.shape[0]} token rows (from first 5 prompts)."
             )
 
-        model = SparseAutoencoder(input_dim=896, latent_dim=3584)
+        model = SparseAutoencoder()
         trainer = SAETrainer(
             model=model,
             learning_rate=args.lr,

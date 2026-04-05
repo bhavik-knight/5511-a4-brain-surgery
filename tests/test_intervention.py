@@ -326,8 +326,9 @@ def test_get_transformer_blocks_raises_for_unsupported_model_shape() -> None:
         model_wrapper=_as_model_wrapper(NoLayerWrapper()),
         sae=SparseAutoencoder(input_dim=896, latent_dim=64),
     )
+    intervention.feature_max_values = torch.ones(64)
     with pytest.raises(RuntimeError):
-        intervention._get_transformer_blocks()
+        intervention.register_prompt_clamp_hook(feature_index=1, clamp_multiplier=2.0)
 
 
 def test_generate_with_clamped_feature_raises_when_sae_missing() -> None:

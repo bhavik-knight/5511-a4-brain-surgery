@@ -14,8 +14,9 @@ from typing import cast
 
 import torch
 from torch import Tensor
+from torch.optim.adam import Adam
 from torch.utils.data import DataLoader, TensorDataset
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard.writer import SummaryWriter
 
 from .sae import SparseAutoencoder
 from .utils import CHECKPOINTS_DIR, RESULTS_DIR
@@ -115,9 +116,7 @@ class SAETrainer:
         self.final_checkpoint_path = checkpoint_dir / "sae_final.pt"
 
         self.model.to(self.device)
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=self.learning_rate
-        )
+        self.optimizer = Adam(self.model.parameters(), lr=self.learning_rate)
         self.writer: SummaryWriter | None = None
         self._wandb: ModuleType | None = _wandb
 
@@ -197,7 +196,9 @@ class SAETrainer:
                 - TrainingSummary with dead neuron fraction and best loss
         """
         if self._should_resume():
-            checkpoint = torch.load(self.checkpoint_path, map_location="cpu")
+            checkpoint = torch.load(
+                self.checkpoint_path, map_location="cpu", weights_only=True
+            )
             self.model.load_state_dict(checkpoint["model_state_dict"])
             self.model.to(self.device)
             print("Loaded SAE checkpoint for resume.")
