@@ -9,7 +9,7 @@ $z \in \mathbb{R}^{m}$ with expansion ($m > d$) and sparsity pressure.
 Linear encoder/decoder core:
 
 $$
-z = \operatorname{ReLU}(W_e x + b_e), \quad \hat{x} = W_d z + b_d
+z = \mathrm{ReLU}(W_e x + b_e), \quad \hat{x} = W_d z + b_d
 $$
 
 where:
@@ -64,7 +64,7 @@ aligned with semantic feature grouping.
 For candidate values of $k$, we compute inertia/SSE:
 
 $$
-\operatorname{SSE}(k) = \sum_{c=1}^{k}\sum_{f_i \in C_c}\lVert f_i - \mu_c \rVert_2^2
+\mathrm{SSE}(k) = \sum_{c=1}^{k}\sum_{f_i \in C_c}\lVert f_i - \mu_c \rVert_2^2
 $$
 
 We select $k$ by a dynamic slowdown heuristic on SSE improvement and export an

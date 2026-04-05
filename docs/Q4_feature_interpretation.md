@@ -10,7 +10,7 @@ token contexts that maximally activate each feature.
 Interpretation operator:
 
 $$
-\mathrm{Feature}\ j \Rightarrow \operatorname*{TopK}_{i}(z_{i,j})
+\mathrm{Feature}\ j \Rightarrow \mathrm{TopK}_{i}(z_{i,j})
 $$
 
 where the highest-activation rows provide candidate meanings for feature $j$.
