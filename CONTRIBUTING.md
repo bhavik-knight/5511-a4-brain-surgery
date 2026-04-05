@@ -42,7 +42,7 @@ Thank you for your interest in contributing to our Sparse Autoencoders and Neura
 1. **Verify your setup:**
 
    ```bash
-   uv run pytest
+   uv run pytest -q
    ```
 
 This ensures all developers use consistent tool versions and configurations.

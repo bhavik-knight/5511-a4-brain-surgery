@@ -8,15 +8,15 @@ The project uses dense, decoder-only Qwen-2.5 checkpoints with grouped-query
 attention (GQA). Pilot experiments run on Qwen-2.5-0.5B, while high-fidelity
 analysis targets Qwen-2.5-7B.
 
-| Feature                   |   Qwen-2.5-0.5B (Pilots) | Qwen-2.5-7B (Golden Run) |
-| ------------------------- | -----------------------: | -----------------------: |
-| Architecture              | Decoder-only Transformer | Decoder-only Transformer |
-| Layers                    |                       24 |                       28 |
-| Hidden Dim ($d\_{model}$) |                      896 |                     3584 |
-| Attention Heads           |    14 Query / 2 KV (GQA) |    28 Query / 4 KV (GQA) |
-| Activation Function       |                   SwiGLU |                   SwiGLU |
-| Normalization             |                  RMSNorm |                  RMSNorm |
-| Positional Encoding       |                     RoPE |                     RoPE |
+| Feature                           |   Qwen-2.5-0.5B (Pilots) | Qwen-2.5-7B (Golden Run) |
+| --------------------------------- | -----------------------: | -----------------------: |
+| Architecture                      | Decoder-only Transformer | Decoder-only Transformer |
+| Layers                            |                       24 |                       28 |
+| Hidden Dim ($d_{\mathrm{model}}$) |                      896 |                     3584 |
+| Attention Heads                   |    14 Query / 2 KV (GQA) |    28 Query / 4 KV (GQA) |
+| Activation Function               |                   SwiGLU |                   SwiGLU |
+| Normalization                     |                  RMSNorm |                  RMSNorm |
+| Positional Encoding               |                     RoPE |                     RoPE |
 
 ### Why Both Models Matter
 
@@ -32,10 +32,10 @@ Expose internal transformer computations as analyzable signals by hooking the
 residual stream at a middle layer. This creates the bridge between black-box
 language generation and mechanistic analysis.
 
-Let $h\_\\ell$ denote hidden states at layer $\\ell$. Q1 operationalizes:
+Let $h_{\ell}$ denote hidden states at layer $\ell$. Q1 operationalizes:
 
 $$
-\\mathrm{prompt} \\rightarrow h\_\\ell \\rightarrow \\mathrm{token\\ alignment\\ rows}
+\mathrm{prompt} \rightarrow h_{\ell} \rightarrow \mathrm{token\ alignment\ rows}
 $$
 
 These rows become the substrate for SAE training (Q3), feature interpretation

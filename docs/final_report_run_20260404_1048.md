@@ -14,7 +14,7 @@ for soccer-domain generation.
 
 - Model family: Qwen-2.5, decoder-only Transformer.
 - Depth: 28 layers.
-- Hidden size: $d\_{model}=3584$.
+- Hidden size: $d_{\mathrm{model}} = 3584$.
 - Residual stream extraction layer: Layer 14.
 
 Layer 14 is selected as a semantic mid-layer where contextual composition is
@@ -25,7 +25,7 @@ early enough to preserve broad latent structure for intervention.
 ### SAE Design
 
 - Expansion factor: 32x.
-- Latent dimensionality: $3584 \\times 32 = 114688$ features.
+- Latent dimensionality: $3584 \times 32 = 114688$ features.
 - Encoder nonlinearity: ReLU.
 
 Precision strategy on A100:
