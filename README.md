@@ -97,6 +97,15 @@ Train for 100 epochs with L1 penalty 0.001.
 uv run python scripts/train_university.py --epoch <num_epoches> --l1 <lambda_panelty> --wandb-run-name <wandb-ai-run-name-for-traceability>
 ```
 
+### Runtime Experiment Charts (Weights & Biases)
+
+All runtime experiment charts (for example: `total_loss`, `mse_loss`, `l1_loss`,
+and `dead_neuron_fraction`) were created and tracked in Weights & Biases.
+
+- Workspace dashboard: https://wandb.ai/bk-smu/a4-brain-surgery/workspace?nw=nwuserbhavikkantilalbhagat
+
+![W&B runtime experiment charts](docs/wandb-runtime-charts.png)
+
 ### 4. Verification and Reporting
 
 Verify pilot results (Q4-Q6) and generate an executive summary.
