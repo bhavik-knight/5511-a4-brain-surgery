@@ -319,40 +319,6 @@ GitHub will automatically load the PR template when you open a new pull request.
 - Evidence that you've verified code quality (`ruff check`, `mypy`, tests)
 - Related issue numbers if applicable
 
-## Project Structure
-
-```
-a4-brain-surgery/
-├── models/                       # Local Hugging Face model directories (offline)
-├── src/
-│   └── brain_surgery/
-│       ├── __init__.py
-│       ├── sae.py                  # Sparse Autoencoder implementation
-│       ├── data_gen.py             # Activation data generation
-│       ├── interpret.py            # SAE interpretation utilities
-│       ├── intervention.py         # Network intervention methods
-│       ├── model_wrapper.py        # Model wrapping and interface
-│       ├── main.py                 # Main entry point
-│       └── utils.py                # Utility functions
-├── tests/
-│   ├── test_sae.py                 # SAE module tests
-│   ├── test_activation_capture.py  # Data generation tests
-│   ├── test_intervention.py        # Intervention method tests
-│   └── test_model_wrapper.py       # Model wrapper tests
-├── data/
-│   ├── activations/                # Captured neuron activations
-│   └── corpus/                     # Training corpus data
-├── results/
-│   ├── experiments/                # Experiment outputs
-│   ├── features/                   # Extracted features
-│   └── metrics/                    # Performance metrics
-├── pyproject.toml                  # uv configuration, dependencies
-├── .pre-commit-config.yaml         # Pre-commit hooks
-├── README.md                       # Project documentation
-├── CONTRIBUTING.md                 # This file
-└── LICENSE                         # Project license
-```
-
 ## Tools Overview
 
 ### uv - Package Management
