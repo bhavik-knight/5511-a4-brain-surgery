@@ -4,7 +4,7 @@ import argparse
 import json
 import traceback
 from collections.abc import Sequence
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 import torch

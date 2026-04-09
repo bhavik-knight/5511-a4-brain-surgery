@@ -51,7 +51,7 @@ or (for windows)
 ```
 
 ```bash
-pre-commit install
+uv run pre-commit install
 uv run pytest tests/
 ```
 
@@ -91,10 +91,10 @@ uv run python -m brain_surgery.data_gen
 
 ### 3. SAE Training
 
-Train for 100 epochs with L1 penalty 0.001.
+Train with configurable epochs and L1 penalty.
 
 ```bash
-uv run python scripts/train_university.py --epoch <num_epoches> --l1 <lambda_panelty> --wandb-run-name <wandb-ai-run-name-for-traceability>
+uv run python scripts/train_university.py --epochs <num_epochs> --l1 <lambda_penalty> --wandb-run-name <wandb_run_name>
 ```
 
 ### Runtime Experiment Charts (Weights & Biases)
@@ -115,7 +115,8 @@ Verify pilot results (Q4-Q6) and generate an executive summary.
 uv run scripts/verify_pilot.py \
   --run-id <run_id> \
   --checkpoint results/experiments/<run_id>/checkpoints/sae_best.pt \
-  --dataset data/activations/soccer_activations_dataset.pt
+  --dataset data/activations/soccer_activations_dataset.pt \
+  --model-dir models/qwen2.5-7b
 ```
 
 ### 5. Report Generation

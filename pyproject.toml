@@ -9,25 +9,14 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "accelerate>=1.10.0",
-    "huggingface-hub>=1.8.0",
     "matplotlib>=3.10.8",
     "pandas>=2.3.3",
     "numpy>=2.3.3",
-    "mypy>=1.19.1",
-    "pre-commit>=4.5.1",
-    "pydantic>=2.12.5",
-    "pytest>=9.0.2",
     "python-dotenv>=1.2.2",
-    "ruff>=0.15.8",
     "scikit-learn>=1.8.0",
-    "seaborn>=0.13.2",
     "tensorboard>=2.20.0",
     "torch==2.4.0+cu118",
-    "torchaudio==2.4.0+cu118",
-    "torchvision==0.19.0+cu118",
     "transformers>=5.4.0",
-    "ty>=0.0.26",
     "wandb>=0.25.1",
 ]
 
@@ -79,3 +68,29 @@ package = true
 
 [tool.uv.sources]
 brain-surgery = { path = ".", editable = true }
+
+[tool.deptry]
+known_first_party = ["brain_surgery"]
+
+[tool.deptry.package_module_name_map]
+"python-dotenv" = "dotenv"
+
+[tool.deptry.per_rule_ignores]
+DEP002 = ["tensorboard"]
+
+[dependency-groups]
+dev = [
+    "accelerate>=1.10.0",
+    "autoflake>=2.3.3",
+    "deptry>=0.25.1",
+    "huggingface-hub>=1.8.0",
+    "isort>=8.0.1",
+    "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
+    "pydantic>=2.12.5",
+    "pytest>=9.0.2",
+    "ruff>=0.15.9",
+    "seaborn>=0.13.2",
+    "ty>=0.0.29",
+    "wandb>=0.25.1",
+]

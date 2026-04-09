@@ -17,15 +17,14 @@ Typical usage:
 
 # ruff: noqa: ANN101
 
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Literal, cast
 
 import torch
 import torch.nn as nn
 from torch import Tensor
 from torch.utils.hooks import RemovableHandle
-
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -36,10 +35,10 @@ from transformers.tokenization_utils_base import BatchEncoding
 
 from .utils import (
     ACTIVATIONS_DIR,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_MODEL_NAME,
     DEFAULT_LAYER_IDX,
     DEFAULT_LAYER_IDX_QWEN_0_5B,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL_NAME,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     ROOT_DIR,

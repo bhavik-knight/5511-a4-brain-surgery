@@ -1,7 +1,7 @@
 """Unit tests for SAEIntervention clamping and log-prob APIs."""
 
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
