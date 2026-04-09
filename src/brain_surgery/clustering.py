@@ -10,11 +10,10 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 import numpy as np
-from numpy.typing import NDArray
-from sklearn.cluster import KMeans
-
 import torch
 import torch.nn.functional as F
+from numpy.typing import NDArray
+from sklearn.cluster import KMeans
 
 from .interpret import SAEInterpreter
 

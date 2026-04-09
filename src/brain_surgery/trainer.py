@@ -4,11 +4,10 @@ Handles the training process including loss computation, optimization,
 and early stopping based on validation loss plateau.
 """
 
-from dataclasses import dataclass
-from importlib import import_module
 import os
-from pathlib import Path
 from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
 from types import ModuleType
 from typing import cast
 
@@ -23,9 +22,11 @@ from .utils import CHECKPOINTS_DIR, RESULTS_DIR
 
 _wandb: ModuleType | None
 try:
-    _wandb = import_module("wandb")
+    import wandb as _wandb_module
 except ImportError:  # pragma: no cover - optional dependency at runtime
     _wandb = None
+else:
+    _wandb = _wandb_module
 
 
 @dataclass(frozen=True)

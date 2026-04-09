@@ -5,10 +5,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from brain_surgery.clustering import (
-    cluster_features_kmeans,
-    print_cluster_analysis,
-)
+from brain_surgery.clustering import cluster_features_kmeans, print_cluster_analysis
 from brain_surgery.interpret import SAEInterpreter
 
 

@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 import torch
+from conftest import FakeCausalLM, FakeTokenizer
 
 import brain_surgery.model_wrapper as model_wrapper_module
 from brain_surgery.model_wrapper import ModelWrapper, get_default_device
-from conftest import FakeCausalLM, FakeTokenizer
 
 
 def _set_generation_state(

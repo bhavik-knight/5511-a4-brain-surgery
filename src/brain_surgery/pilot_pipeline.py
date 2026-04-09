@@ -3,10 +3,10 @@
 This module contains the heavy-lifting logic used by the verify-pilot CLI scripts.
 """
 
-from collections import Counter
-from collections.abc import Callable
 import csv
 import json
+from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 

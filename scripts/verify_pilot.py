@@ -17,8 +17,8 @@ from brain_surgery.model_wrapper import ModelWrapper
 from brain_surgery.utils import (
     ACTIVATIONS_DIR,
     CHECKPOINTS_DIR,
-    DEFAULT_MODEL_NAME,
     DEFAULT_LAYER_IDX,
+    DEFAULT_MODEL_NAME,
     EXPERIMENTS_DIR,
     create_run_output_dirs,
     generate_run_id,

@@ -8,6 +8,7 @@ the A100 cluster.
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
+
 from brain_surgery.sae import SparseAutoencoder
 from brain_surgery.trainer import SAETrainer
 from brain_surgery.utils import ACTIVATIONS_DIR, METRICS_DIR, ensure_dir_exists
